@@ -1,0 +1,11 @@
+metrics:
+  primary: acer
+  secondary:
+    - apcer
+    - bpcer
+    - auc
+    - latency_ms
+threshold_search:
+  min: 0.1
+  max: 0.99
+  steps: 90

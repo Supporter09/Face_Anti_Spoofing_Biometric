@@ -1,0 +1,5 @@
+service:
+  stub_mode: true
+  threshold_live: 0.9
+  expected_input: base64_jpeg
+  fallback_label: uncertain

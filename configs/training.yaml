@@ -1,0 +1,15 @@
+experiment_name: minifasnet_celeba_spoof_baseline
+seed: 42
+dataset:
+  name: celeba_spoof
+  raw_root: data/raw/celeba_spoof
+  processed_root: data/processed/celeba_spoof_80x80
+  image_size: 80
+training:
+  batch_size: 64
+  epochs: 10
+  learning_rate: 0.001
+  device: auto
+outputs:
+  checkpoint_dir: models/artifacts/checkpoints
+  report_dir: reports/generated/training

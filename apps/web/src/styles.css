@@ -1,0 +1,115 @@
+:root {
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  color: #f6f0e7;
+  background:
+    radial-gradient(circle at top, rgba(255, 173, 96, 0.25), transparent 30%),
+    linear-gradient(160deg, #10171d 0%, #18232f 55%, #081018 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+button {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.9rem 1.2rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: #f09a4a;
+  color: #091018;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.page-shell {
+  width: min(1120px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 2rem 0 4rem;
+}
+
+.hero-card,
+.video-card,
+.result-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  background: rgba(10, 16, 23, 0.78);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+.hero-card {
+  padding: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #ffbe7a;
+  font-size: 0.8rem;
+}
+
+.lede {
+  max-width: 60ch;
+  color: #cfddd8;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.demo-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 1.5rem;
+}
+
+.video-card,
+.result-card {
+  padding: 1rem;
+}
+
+.video-feed {
+  width: 100%;
+  min-height: 320px;
+  border-radius: 18px;
+  background: #02070c;
+  object-fit: cover;
+}
+
+.result-card.good {
+  border-color: rgba(86, 224, 157, 0.55);
+}
+
+.result-card.bad {
+  border-color: rgba(255, 96, 96, 0.55);
+}
+
+.result-card.warn {
+  border-color: rgba(255, 188, 79, 0.55);
+}
+
+.error {
+  color: #ff8d8d;
+}
+
+.message {
+  color: #cfddd8;
+}
+
+@media (max-width: 900px) {
+  .demo-grid {
+    grid-template-columns: 1fr;
+  }
+}

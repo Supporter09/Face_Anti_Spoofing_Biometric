@@ -1,0 +1,77 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import numpy as np
+
+from fas.preprocess import expand_bbox, resize_bgr_image
+from fas.types import FaceDetection
+
+
+@dataclass
+class InsightFaceDetector:
+    det_size: tuple[int, int] = (640, 640)
+    max_num_faces: int = 1
+    margin_ratio: float = 0.2
+
+    def __post_init__(self) -> None:
+        self._app = None
+        self._unavailable_reason: str | None = None
+
+    @property
+    def unavailable_reason(self) -> str | None:
+        return self._unavailable_reason
+
+    def _ensure_initialized(self) -> bool:
+        if self._app is not None:
+            return True
+
+        try:
+            from insightface.app import FaceAnalysis  # type: ignore
+        except ImportError:
+            self._unavailable_reason = (
+                'insightface is not installed. Install optional ML dependencies first.'
+            )
+            return False
+
+        try:
+            app = FaceAnalysis(allowed_modules=['detection'])
+            app.prepare(ctx_id=0, det_size=self.det_size)
+        except Exception:
+            app = FaceAnalysis(allowed_modules=['detection'])
+            app.prepare(ctx_id=-1, det_size=self.det_size)
+
+        self._app = app
+        self._unavailable_reason = None
+        return True
+
+    def detect(self, image_bgr: np.ndarray) -> FaceDetection | None:
+        if not self._ensure_initialized():
+            return None
+
+        assert self._app is not None
+        faces = self._app.get(image_bgr, max_num=self.max_num_faces)
+        if not faces:
+            return None
+
+        face = max(faces, key=lambda current: float((current.bbox[2] - current.bbox[0]) * (current.bbox[3] - current.bbox[1])))
+
+        x1, y1, x2, y2 = [int(value) for value in face.bbox]
+        x1, y1, x2, y2 = expand_bbox(
+            (x1, y1, x2, y2),
+            image_height=image_bgr.shape[0],
+            image_width=image_bgr.shape[1],
+            margin_ratio=self.margin_ratio,
+        )
+        crop = image_bgr[y1:y2, x1:x2]
+        aligned_crop = resize_bgr_image(crop, image_size=80)
+
+        landmarks: list[tuple[float, float]] = []
+        if hasattr(face, 'kps') and face.kps is not None:
+            landmarks = [(float(point[0]), float(point[1])) for point in face.kps.tolist()]
+
+        return FaceDetection(
+            bbox_xyxy=(x1, y1, x2, y2),
+            landmarks=landmarks,
+            aligned_crop_bgr=aligned_crop,
+        )

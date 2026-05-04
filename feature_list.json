@@ -1,0 +1,64 @@
+{
+  "features": [
+    {
+      "id": "feat-001",
+      "name": "Research harness and scaffold",
+      "status": "complete",
+      "owner": "platform",
+      "dependencies": [],
+      "definition_of_done": [
+        "Repo structure exists",
+        "Harness files exist",
+        "Verification commands documented"
+      ]
+    },
+    {
+      "id": "feat-002",
+      "name": "Liveness inference API MVP",
+      "status": "complete",
+      "owner": "backend",
+      "dependencies": ["feat-001"],
+      "definition_of_done": [
+        "Health endpoint passes",
+        "Inference contract implemented",
+        "Latency field returned"
+      ]
+    },
+    {
+      "id": "feat-003",
+      "name": "Webcam demo MVP",
+      "status": "in_progress",
+      "owner": "frontend",
+      "dependencies": ["feat-002"],
+      "definition_of_done": [
+        "Browser webcam preview works",
+        "API requests handled",
+        "Result states rendered"
+      ]
+    },
+    {
+      "id": "feat-004",
+      "name": "Notebook-first training track",
+      "status": "in_progress",
+      "owner": "ml",
+      "dependencies": ["feat-001"],
+      "definition_of_done": [
+        "Notebooks scaffolded",
+        "Config locations documented",
+        "Outputs standardized"
+      ]
+    },
+    {
+      "id": "feat-005",
+      "name": "Paper workspace",
+      "status": "in_progress",
+      "owner": "docs",
+      "dependencies": ["feat-001"],
+      "definition_of_done": [
+        "LaTeX compiles once environment is available",
+        "Section files exist",
+        "Citation placeholders are explicit"
+      ]
+    }
+  ]
+}
