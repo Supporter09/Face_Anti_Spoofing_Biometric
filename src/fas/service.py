@@ -16,14 +16,28 @@ class LivenessService:
         *,
         detector: FaceDetector | None = None,
         liveness_model: LivenessModel | None = None,
-        threshold_live: float = 0.9,
-        threshold_spoof: float = 0.3,
+        threshold_live: float | None = None,
+        threshold_spoof: float | None = None,
     ) -> None:
         model_path = os.environ.get('LIVENESS_MODEL_PATH')
         self.detector = detector or InsightFaceDetector()
         self.liveness_model = liveness_model or TorchLivenessModel(model_path=model_path)
-        self.threshold_live = threshold_live
-        self.threshold_spoof = threshold_spoof
+
+        resolved_live = (
+            threshold_live
+            if threshold_live is not None
+            else self._read_threshold_from_env('LIVENESS_LIVE_THRESHOLD', default=0.9)
+        )
+        resolved_spoof = (
+            threshold_spoof
+            if threshold_spoof is not None
+            else self._read_threshold_from_env('LIVENESS_SPOOF_THRESHOLD', default=0.3)
+        )
+
+        self.threshold_live, self.threshold_spoof = self._normalize_threshold_pair(
+            threshold_live=resolved_live,
+            threshold_spoof=resolved_spoof,
+        )
 
     def infer(self, request: LivenessInferRequest) -> LivenessInferResponse:
         started_at = perf_counter()
@@ -83,6 +97,24 @@ class LivenessService:
         if live_score <= self.threshold_spoof:
             return 'spoof'
         return 'uncertain'
+
+    @staticmethod
+    def _read_threshold_from_env(name: str, default: float) -> float:
+        raw = os.environ.get(name)
+        if raw is None:
+            return default
+        try:
+            value = float(raw)
+        except ValueError:
+            return default
+        return max(0.0, min(1.0, value))
+
+    @staticmethod
+    def _normalize_threshold_pair(*, threshold_live: float, threshold_spoof: float) -> tuple[float, float]:
+        # Ensure a valid uncertain band exists between spoof and live decisions.
+        if threshold_spoof >= threshold_live:
+            return 0.9, 0.3
+        return threshold_live, threshold_spoof
 
     def _build_response(
         self,

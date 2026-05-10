@@ -48,8 +48,14 @@ Kaggle self-contained track:
 Environment variables:
 
 - `LIVENESS_MODEL_PATH`: path to TorchScript liveness checkpoint (`.pt`)
-- `LIVENESS_LIVE_THRESHOLD`: currently configured in code defaults (`0.9`)
-- `LIVENESS_SPOOF_THRESHOLD`: currently configured in code defaults (`0.3`)
+- `LIVENESS_LIVE_THRESHOLD`: optional live decision threshold override (`default=0.9`)
+- `LIVENESS_SPOOF_THRESHOLD`: optional spoof decision threshold override (`default=0.3`)
+
+Notes:
+
+- Thresholds are clamped to `[0.0, 1.0]`.
+- The pair must satisfy `LIVENESS_SPOOF_THRESHOLD < LIVENESS_LIVE_THRESHOLD`.
+- If the configured pair is invalid, service falls back to defaults (`0.3`, `0.9`).
 
 ## Quick Start
 
@@ -76,6 +82,20 @@ npm run dev
 ```
 
 The frontend expects the API at `http://127.0.0.1:8000` by default.
+
+### Integrated MVP Demo (Backend + Frontend + Model)
+
+Backend terminal:
+
+```bash
+./scripts/run_backend_demo.sh
+```
+
+Frontend terminal:
+
+```bash
+./scripts/run_frontend_demo.sh
+```
 
 ## Verification
 

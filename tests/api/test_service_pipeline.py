@@ -79,3 +79,71 @@ def test_service_reports_spoof_when_score_is_low(monkeypatch) -> None:
 
     assert response.face_detected is True
     assert response.liveness_label == 'spoof'
+
+
+def test_service_uses_env_thresholds_when_constructor_thresholds_omitted(monkeypatch) -> None:
+    from fas import service as service_module
+
+    monkeypatch.setattr(
+        service_module,
+        'decode_base64_image_to_bgr',
+        lambda _: DecodeStub(image_bgr=np.zeros((8, 8, 3), dtype=np.uint8), error=None),
+    )
+    monkeypatch.setenv('LIVENESS_LIVE_THRESHOLD', '0.8')
+    monkeypatch.setenv('LIVENESS_SPOOF_THRESHOLD', '0.1')
+
+    service = LivenessService(
+        detector=FakeDetector(),
+        liveness_model=FakeLivenessModel(score=0.85),
+    )
+
+    response = service.infer(LivenessInferRequest(image_base64='valid'))
+
+    assert response.face_detected is True
+    assert response.liveness_label == 'live'
+
+
+def test_service_falls_back_to_defaults_when_env_threshold_pair_is_invalid(monkeypatch) -> None:
+    from fas import service as service_module
+
+    monkeypatch.setattr(
+        service_module,
+        'decode_base64_image_to_bgr',
+        lambda _: DecodeStub(image_bgr=np.zeros((8, 8, 3), dtype=np.uint8), error=None),
+    )
+    monkeypatch.setenv('LIVENESS_LIVE_THRESHOLD', '0.2')
+    monkeypatch.setenv('LIVENESS_SPOOF_THRESHOLD', '0.7')
+
+    service = LivenessService(
+        detector=FakeDetector(),
+        liveness_model=FakeLivenessModel(score=0.95),
+    )
+
+    assert service.threshold_live == 0.9
+    assert service.threshold_spoof == 0.3
+    response = service.infer(LivenessInferRequest(image_base64='valid'))
+    assert response.liveness_label == 'live'
+
+
+def test_service_explicit_thresholds_override_env(monkeypatch) -> None:
+    from fas import service as service_module
+
+    monkeypatch.setattr(
+        service_module,
+        'decode_base64_image_to_bgr',
+        lambda _: DecodeStub(image_bgr=np.zeros((8, 8, 3), dtype=np.uint8), error=None),
+    )
+    monkeypatch.setenv('LIVENESS_LIVE_THRESHOLD', '0.99')
+    monkeypatch.setenv('LIVENESS_SPOOF_THRESHOLD', '0.01')
+
+    service = LivenessService(
+        detector=FakeDetector(),
+        liveness_model=FakeLivenessModel(score=0.85),
+        threshold_live=0.8,
+        threshold_spoof=0.1,
+    )
+
+    response = service.infer(LivenessInferRequest(image_base64='valid'))
+
+    assert response.face_detected is True
+    assert response.liveness_label == 'live'
