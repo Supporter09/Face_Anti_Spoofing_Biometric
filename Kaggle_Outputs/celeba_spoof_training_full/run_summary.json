@@ -1,0 +1,5 @@
+{
+  "best_checkpoint": "/kaggle/working/celeba_spoof_training_full/best_model.pt",
+  "best_scripted_checkpoint": "/kaggle/working/celeba_spoof_training_full/best_model_scripted.pt",
+  "best_val_acc": 0.9863875404530744
+}
