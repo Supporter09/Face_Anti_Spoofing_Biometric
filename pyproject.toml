@@ -27,6 +27,8 @@ ml = [
   "matplotlib>=3.8",
   "scikit-learn>=1.4",
   "tqdm>=4.66",
+  "mediapipe==0.10.35",
+  "rembg==2.0.75"
 ]
 dev = [
   "pytest>=8.2",
