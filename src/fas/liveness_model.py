@@ -9,7 +9,7 @@ import numpy as np
 @dataclass
 class TorchLivenessModel:
     model_path: str | None = None
-    input_size: int = 80
+    input_size: int = 112
 
     def __post_init__(self) -> None:
         self._model = None
@@ -77,8 +77,11 @@ class TorchLivenessModel:
 
         resized = cv2.resize(face_crop_bgr, (self.input_size, self.input_size))
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
-        normalized = rgb.astype(np.float32) / 255.0
-        chw = np.transpose(normalized, (2, 0, 1))
+        arr = rgb.astype(np.float32) / 255.0
+        mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+        std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+        arr = (arr - mean) / std
+        chw = np.transpose(arr, (2, 0, 1))
         tensor = torch.from_numpy(chw).unsqueeze(0)
         return tensor
 
