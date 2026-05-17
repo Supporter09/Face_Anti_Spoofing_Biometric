@@ -1,4 +1,8 @@
-from fastapi import FastAPI
+import base64
+
+import cv2
+import numpy as np
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from fas.schemas import LivenessInferRequest, LivenessInferResponse
@@ -23,3 +27,23 @@ def health() -> dict[str, str]:
 @app.post('/v1/liveness/infer', response_model=LivenessInferResponse)
 def infer_liveness(payload: LivenessInferRequest) -> LivenessInferResponse:
     return service.infer(payload)
+
+
+@app.websocket("/ws/liveness")
+async def ws_liveness(websocket: WebSocket) -> None:
+    await websocket.accept()
+    service = LivenessService()
+    try:
+        while True:
+            data = await websocket.receive_bytes()
+            arr = np.frombuffer(data, dtype=np.uint8)
+            bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            if bgr is None:
+                await websocket.send_json({"error": "could not decode frame"})
+                continue
+            _, buf = cv2.imencode('.jpg', bgr, [cv2.IMWRITE_JPEG_QUALITY, 70])
+            b64 = base64.b64encode(buf.tobytes()).decode()
+            result = service.infer(LivenessInferRequest(image_base64=b64))
+            await websocket.send_json(result.model_dump())
+    except WebSocketDisconnect:
+        pass
