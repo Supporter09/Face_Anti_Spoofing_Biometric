@@ -1,13 +1,13 @@
-experiment_name: minifasnet_celeba_spoof_baseline
+experiment_name: mobilenetv2_celeba_spoof
 seed: 42
 dataset:
   name: celeba_spoof
   raw_root: data/raw/celeba_spoof
-  processed_root: data/processed/celeba_spoof_80x80
-  image_size: 80
+  processed_root: data/processed/celeba_spoof_112x112
+  image_size: 112
 training:
   batch_size: 64
-  epochs: 10
+  epochs: 15
   learning_rate: 0.001
   device: auto
 outputs:
