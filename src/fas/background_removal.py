@@ -112,14 +112,22 @@ class BackgroundRemover:
         mask_uint8 = cv2.morphologyEx(mask_uint8, cv2.MORPH_CLOSE, kernel, iterations=2)
         mask_uint8 = cv2.morphologyEx(mask_uint8, cv2.MORPH_OPEN, kernel, iterations=1)
 
-        mask_3ch = cv2.merge([mask_uint8, mask_uint8, mask_uint8])
+        # Soft edge: Gaussian blur for smooth transition (instead of hard padding)
+        mask_uint8 = cv2.GaussianBlur(mask_uint8, (21, 21), 0)
+
+        # Soft blend using the smooth mask
+        mask_float = mask_uint8.astype(np.float32) / 255.0
+        mask_float = mask_float[:, :, np.newaxis]
+
         # [0, 0, 0]   -> black
         # [0, 255, 0] -> green
         # [255, 0, 0] -> red
         # [0, 0, 255] -> blue
         # [255, 255, 255] -> white
         background_color = np.array([0, 0, 0], dtype=np.uint8)
-        result = np.where(mask_3ch > 0, image_bgr, background_color)
+        bg_layer = np.full_like(image_bgr, background_color)
+
+        result = (image_bgr.astype(np.float32) * mask_float + bg_layer.astype(np.float32) * (1 - mask_float)).astype(np.uint8)
 
         return result
 
@@ -145,14 +153,22 @@ class BackgroundRemover:
         mask_uint8 = cv2.morphologyEx(mask_uint8, cv2.MORPH_CLOSE, kernel, iterations=3)
         mask_uint8 = cv2.morphologyEx(mask_uint8, cv2.MORPH_OPEN, kernel, iterations=2)
 
-        mask_3ch = cv2.merge([mask_uint8, mask_uint8, mask_uint8])
+        # Soft edge: Gaussian blur for smooth transition
+        mask_uint8 = cv2.GaussianBlur(mask_uint8, (21, 21), 0)
+
+        # Soft blend using the smooth mask
+        mask_float = mask_uint8.astype(np.float32) / 255.0
+        mask_float = mask_float[:, :, np.newaxis]
+
         # [0, 0, 0]   -> black
         # [0, 255, 0] -> green
         # [255, 0, 0] -> red
         # [0, 0, 255] -> blue
         # [255, 255, 255] -> white
         background_color = np.array([0, 0, 0], dtype=np.uint8)
-        result = np.where(mask_3ch > 0, image_bgr, background_color)
+        bg_layer = np.full_like(image_bgr, background_color)
+
+        result = (image_bgr.astype(np.float32) * mask_float + bg_layer.astype(np.float32) * (1 - mask_float)).astype(np.uint8)
 
         return result
 
