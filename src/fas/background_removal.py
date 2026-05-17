@@ -113,7 +113,13 @@ class BackgroundRemover:
         mask_uint8 = cv2.morphologyEx(mask_uint8, cv2.MORPH_OPEN, kernel, iterations=1)
 
         mask_3ch = cv2.merge([mask_uint8, mask_uint8, mask_uint8])
-        result = cv2.bitwise_and(image_bgr, mask_3ch)
+        # [0, 0, 0]   -> black
+        # [0, 255, 0] -> green
+        # [255, 0, 0] -> red
+        # [0, 0, 255] -> blue
+        # [255, 255, 255] -> white
+        background_color = np.array([0, 0, 0], dtype=np.uint8)
+        result = np.where(mask_3ch > 0, image_bgr, background_color)
 
         return result
 
@@ -140,7 +146,13 @@ class BackgroundRemover:
         mask_uint8 = cv2.morphologyEx(mask_uint8, cv2.MORPH_OPEN, kernel, iterations=2)
 
         mask_3ch = cv2.merge([mask_uint8, mask_uint8, mask_uint8])
-        result = cv2.bitwise_and(image_bgr, mask_3ch)
+        # [0, 0, 0]   -> black
+        # [0, 255, 0] -> green
+        # [255, 0, 0] -> red
+        # [0, 0, 255] -> blue
+        # [255, 255, 255] -> white
+        background_color = np.array([0, 0, 0], dtype=np.uint8)
+        result = np.where(mask_3ch > 0, image_bgr, background_color)
 
         return result
 
