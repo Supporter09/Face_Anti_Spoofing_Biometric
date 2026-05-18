@@ -1,6 +1,10 @@
 @echo off
 setlocal enabledelayedexpansion
 
+set "CUDA_PATH=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0"
+set "CUDNNPATH=C:\Program Files\NVIDIA\CUDNN\v9.13\bin\13.0"
+set "PATH=%CUDA_PATH%\bin;%CUDA_PATH%\bin\x64;%CUDA_PATH%\libnvvp;%CUDNNPATH%;%PATH%"
+
 REM Get project root directory (parent of this script's folder)
 set "ROOT_DIR=%~dp0.."
 set "WEB_DIR=%ROOT_DIR%\apps\web"

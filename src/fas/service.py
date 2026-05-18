@@ -73,8 +73,8 @@ class LivenessService:
                 message=decoded.error or 'Could not decode image payload.',
             )
 
-        if self.enable_background_removal and self.background_remover is not None:
-            decoded.image_bgr = self.background_remover.remove_background(decoded.image_bgr)
+        # if self.enable_background_removal and self.background_remover is not None:
+        #     decoded.image_bgr = self.background_remover.remove_background(decoded.image_bgr)
 
         # cv2.imshow("image", decoded.image_bgr)
         # cv2.waitKey(0)
