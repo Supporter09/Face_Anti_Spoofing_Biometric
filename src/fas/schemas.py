@@ -18,3 +18,6 @@ class LivenessInferResponse(BaseModel):
     message: str | None = None
     face_bbox_xyxy: list[int] | None = None
     face_landmarks: list[list[float]] | None = None
+    yaw_deg: float | None = None
+    pitch_deg: float | None = None
+    pose_ok: bool = False
