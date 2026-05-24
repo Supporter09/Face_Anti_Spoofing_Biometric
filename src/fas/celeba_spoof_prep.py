@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from fas.preprocess import clamp_bbox_to_image, resize_bgr_image
+from fas.preprocess import clamp_bbox_to_image, pad_to_square_then_resize, resize_bgr_image
 
 
 @dataclass
@@ -22,6 +22,7 @@ class PrepConfig:
     spoof_values: tuple[Any, ...] = (0, '0', 'spoof', 'fake', False)
     image_size: int = 80
     bbox_margin_ratio: float = 0.15
+    context_margin_ratio: float | None = None  # if set, overrides bbox_margin_ratio and applies pad-to-square
 
 
 def load_annotation_table(annotation_path: str) -> pd.DataFrame:
@@ -135,8 +136,9 @@ def crop_faces_from_manifest(
     out_root.mkdir(parents=True, exist_ok=True)
 
     rows: list[dict[str, Any]] = []
-
     has_bbox = {'bbox_x', 'bbox_y', 'bbox_w', 'bbox_h'}.issubset(manifest_df.columns)
+    use_context = config.context_margin_ratio is not None
+    margin = config.context_margin_ratio if use_context else config.bbox_margin_ratio
 
     iterator = tqdm(manifest_df.itertuples(index=False), total=len(manifest_df), desc='Cropping faces')
     for index, row in enumerate(iterator):
@@ -153,14 +155,17 @@ def crop_faces_from_manifest(
                 h=float(row.bbox_h),
                 image_height=image.shape[0],
                 image_width=image.shape[1],
-                margin_ratio=config.bbox_margin_ratio,
+                margin_ratio=margin,
             )
             face = image[y1:y2, x1:x2]
         else:
             x1, y1, x2, y2 = 0, 0, image.shape[1], image.shape[0]
             face = image
 
-        resized = resize_bgr_image(face, config.image_size)
+        if use_context:
+            resized = pad_to_square_then_resize(face, config.image_size)
+        else:
+            resized = resize_bgr_image(face, config.image_size)
         dst_name = f'{index:08d}_{Path(row.image_path).stem}.jpg'
         dst_path = out_root / dst_name
         cv2.imwrite(str(dst_path), resized)
