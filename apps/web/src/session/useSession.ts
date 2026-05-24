@@ -5,7 +5,7 @@ import type { FrameApiResponse, FrameRecord, Phase, TurnDirection, Verdict } fro
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
 const CAPTURE_INTERVAL_MS = 100
-const COUNTDOWN_MS = 2000
+const COUNTDOWN_MS = 3000  // 3s so backend JIT warmup (TorchScript first-inference) finishes before first frame
 const REQUIRED_CONSECUTIVE_FRAMES = 5
 const CAPTURE_WIDTH = 640
 const CAPTURE_HEIGHT = 480
@@ -82,7 +82,12 @@ export function useSession(
   state: SessionState
   start: () => void
   reset: () => void
+  isDiagnose: boolean
 } {
+  // Diagnose mode: all phases run to timeout; no early advancement.
+  // Activate via ?diagnose=1 in URL.
+  const isDiagnose = new URLSearchParams(window.location.search).has('diagnose')
+
   const [state, setState] = useState<SessionState>(initialState)
   const stateRef = useRef(state)
   const inFlightRef = useRef(false)
@@ -210,7 +215,10 @@ export function useSession(
         error: null,
       }))
 
-      if (consecutiveRef.current >= REQUIRED_CONSECUTIVE_FRAMES) advanceFrom(current.phase)
+      // In diagnose mode every phase runs to timeout so all phases are always captured.
+      if (!isDiagnose && consecutiveRef.current >= REQUIRED_CONSECUTIVE_FRAMES) {
+        advanceFrom(current.phase)
+      }
     } catch (caughtError) {
       setState((latest) => ({
         ...latest,
@@ -268,5 +276,5 @@ export function useSession(
     }))
   }, [state.frames, state.phase, state.turn_A_dir])
 
-  return { state, start, reset }
+  return { state, start, reset, isDiagnose }
 }

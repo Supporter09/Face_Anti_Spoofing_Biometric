@@ -288,3 +288,154 @@ button:disabled {
     font-size: 1.25rem;
   }
 }
+
+/* ── Diagnose mode ───────────────────────────────────────────────────────── */
+.diag-shell {
+  width: min(680px, 100%);
+  padding: 1rem 0 2rem;
+}
+
+.diag-header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.diag-header h1 {
+  font-size: 1.6rem;
+  margin-bottom: 0.3rem;
+}
+
+.diag-subtitle {
+  color: #8fa3b0;
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+}
+
+.diag-baseline {
+  color: #8fa3b0;
+  font-size: 0.82rem;
+  margin-top: 0.4rem;
+}
+
+.diag-overall-badge {
+  margin: 0.5rem 0;
+}
+
+.diag-overall {
+  display: inline-block;
+  padding: 0.4rem 1.2rem;
+  border-radius: 99px;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.diag-overall.pass { background: rgba(46,213,115,0.18); color: #2ed573; }
+.diag-overall.fail { background: rgba(255,107,129,0.18); color: #ff6b81; }
+
+.diag-phases {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.diag-phase-card {
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  background: rgba(255,255,255,0.04);
+  border-left: 3px solid transparent;
+}
+
+.diag-phase-card.pass { border-left-color: #2ed573; }
+.diag-phase-card.fail { border-left-color: #ff6b81; }
+
+.diag-phase-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.3rem;
+}
+
+.diag-phase-name {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.diag-phase-badge {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.15rem 0.6rem;
+  border-radius: 99px;
+}
+
+.diag-phase-badge.pass { background: rgba(46,213,115,0.2); color: #2ed573; }
+.diag-phase-badge.fail { background: rgba(255,107,129,0.2); color: #ff6b81; }
+
+.diag-phase-meta {
+  color: #8fa3b0;
+  font-size: 0.82rem;
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.diag-bars {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.diag-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.diag-bar-key {
+  font-size: 0.75rem;
+  color: #8fa3b0;
+  width: 44px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.diag-bar-track {
+  flex: 1;
+  height: 16px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+
+.diag-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+
+.diag-bar-label {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.7rem;
+  color: #fff;
+  font-weight: 600;
+  mix-blend-mode: plus-lighter;
+}
+
+.diag-phase-note {
+  font-size: 0.82rem;
+  color: #b0c4cf;
+  margin: 0;
+  padding-top: 0.1rem;
+}
+
+.diag-footer {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}

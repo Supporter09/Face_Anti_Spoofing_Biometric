@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { DiagnoseView } from './session/DiagnoseView'
 import { ResultView } from './session/ResultView'
 import { SessionView } from './session/SessionView'
 import { useSession } from './session/useSession'
@@ -20,11 +21,37 @@ const SCORE_WINDOW_SIZE = 5
 const THRESHOLD_LIVE = 0.85
 const THRESHOLD_SPOOF = 0.35
 
+const API_BASE_SESSION = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
+
 async function startCamera(videoRef: React.RefObject<HTMLVideoElement | null>) {
   const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
   if (!videoRef.current) return
   videoRef.current.srcObject = stream
   await videoRef.current.play()
+}
+
+/** Send one dummy frame to trigger TorchScript JIT warmup so the first real session isn't slow. */
+async function prewarmBackend(
+  videoRef: React.RefObject<HTMLVideoElement | null>,
+  canvasRef: React.RefObject<HTMLCanvasElement | null>,
+) {
+  // Wait for first real video frame
+  await new Promise<void>((resolve) => setTimeout(resolve, 800))
+  const video = videoRef.current
+  const canvas = canvasRef.current
+  if (!video || !canvas) return
+  canvas.width = 640
+  canvas.height = 480
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  ctx.drawImage(video, 0, 0, 640, 480)
+  const b64 = canvas.toDataURL('image/jpeg', 0.7).split(',')[1]
+  if (!b64) return
+  fetch(`${API_BASE_SESSION}/v1/liveness/frame`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image_base64: b64 }),
+  }).catch(() => { /* ignore warmup errors */ })
 }
 
 function LegacyApp() {
@@ -216,10 +243,12 @@ function App() {
   const isLegacy = new URLSearchParams(window.location.search).has('legacy')
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const { state, start, reset } = useSession(videoRef, canvasRef)
+  const { state, start, reset, isDiagnose } = useSession(videoRef, canvasRef)
 
   useEffect(() => {
-    if (!isLegacy) void startCamera(videoRef)
+    if (!isLegacy) {
+      void startCamera(videoRef).then(() => prewarmBackend(videoRef, canvasRef))
+    }
   }, [isLegacy])
 
   if (isLegacy) return <LegacyApp />
@@ -235,8 +264,11 @@ function App() {
         <SessionView videoRef={videoRef} state={state} onStart={start} onReset={reset} />
       </div>
       <canvas ref={canvasRef} hidden />
-      {showResult && (
+      {showResult && !isDiagnose && (
         <ResultView verdict={state.verdict!} turn_A_dir={state.turn_A_dir!} onRetry={reset} />
+      )}
+      {showResult && isDiagnose && (
+        <DiagnoseView frames={state.frames} turn_A_dir={state.turn_A_dir!} onRetry={reset} />
       )}
     </>
   )
