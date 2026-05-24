@@ -1,0 +1,10 @@
+{
+  "best_acer": 0.0007918296076069886,
+  "best_threshold": 0.4,
+  "image_size": 224,
+  "preprocessing": "imagenet_norm",
+  "best_checkpoint": "/kaggle/working/context_mobilenetv2_224/best_model.pt",
+  "scripted_checkpoint": "/kaggle/working/context_mobilenetv2_224/mobilenetv2_context_scripted.pt",
+  "backbone": "mobilenet_v2_imagenet1k_v1",
+  "context_margin_ratio": 1.2
+}

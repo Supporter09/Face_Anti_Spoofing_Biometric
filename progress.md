@@ -2,9 +2,9 @@
 
 ## Current State
 
-- Active feature: model validation and backend threshold calibration
-- Status: local MVP runtime wired (backend + frontend + scripted model) and ready for webcam demo tests (May 10, 2026)
-- Branch target: `feat/liveness-mvp-scaffold`
+- Active feature: hybrid context + challenge liveness
+- Status: context MobileNetV2 training artifacts are available; backend defaults and frontend session UI are wired for the new flow (May 24, 2026)
+- Branch target: `feat/fas-context-challenge`
 
 ## Completed
 
@@ -32,12 +32,42 @@
 
 ## In Progress
 
-- Threshold policy selection for production-like behavior (`live`, `spoof`, `uncertain`).
-- Error analysis of hard live samples scored as spoof and hard spoof samples scored as live.
+- Manual webcam validation of the new session UI.
+- Tier 2 webcam eval collection and reporting.
+- Error analysis of any real webcam false accepts/false rejects from the context + challenge flow.
+
+## Completed This Session
+
+- Switched `scripts/run_backend_demo.sh` default model to `Kaggle_Outputs/context_mobilenetv2_224/mobilenetv2_context_scripted.pt`.
+- Set demo thresholds to bracket the trained decision threshold: spoof `0.3`, live `0.5`, with `T_PASSIVE=0.4` used in browser fusion.
+- Added Vitest/jsdom/testing-library setup for `apps/web`.
+- Added frontend session module:
+  - `types.ts`
+  - `fusion.ts` with passive/challenge fusion and unit tests
+  - `useSession.ts` state machine for countdown, forward, randomized turns, evaluation, and result
+  - `SessionView.tsx`
+  - `ResultView.tsx`
+- Rewrote `App.tsx` so the new session UI is the default and the previous MVP UI remains available at `?legacy=1`.
+- Added standalone webcam collection tool: `scripts/collect_webcam_eval.py`.
+- Added Vietnamese webcam collection protocol: `docs/WEBCAM_COLLECTION_PROTOCOL.md`.
+- Added Tier 1 CelebA-Spoof comparison report: `reports/tier1_celeba_spoof_comparison.md`.
+- Phase 1 backend helpers and pose completed:
+  - `pad_to_square_then_resize`
+  - context crop prep support
+  - 5-landmark head pose estimation
+- Phase 2 backend integration completed:
+  - `FaceDetection.context_crop_bgr`
+  - detector context crop output
+  - pose fields in response schema
+  - service uses context crop and populates pose
+  - `/v1/liveness/frame` endpoint
+  - backend smoke with generated blank frame returned pose fields (`pose_ok=false`, no face)
+- Task 10 notebook preparation completed:
+  - `notebooks/kaggle_full_07_train_context_mobilenetv2.ipynb`
 
 ## Next
 
-1. Run real webcam sessions and record outcomes by condition (normal light, low light, phone-screen replay, printed photo).
-2. Measure live false-reject vs spoof false-accept tradeoff for current candidate thresholds (`spoof=0.10`, `live=0.80`).
-3. Save benchmark/eval evidence under `reports/` and update threshold recommendation.
-4. Launch second training iteration focused on hard examples and class overlap reduction.
+1. Run manual webcam sessions against the new browser flow and record any UX/pose threshold issues.
+2. Collect Tier 2 webcam eval data with `scripts/collect_webcam_eval.py`.
+3. Populate Tier 2 frame-level and session-level reports after collection.
+4. Keep the legacy UI available for regression checks via `http://127.0.0.1:5173?legacy=1`.

@@ -14,6 +14,7 @@ class FakeDetector:
             bbox_xyxy=(1, 1, 7, 7),
             landmarks=[(2.0, 2.0), (6.0, 2.0), (4.0, 4.0), (2.0, 6.0), (6.0, 6.0)],
             aligned_crop_bgr=np.zeros((80, 80, 3), dtype=np.uint8),
+            context_crop_bgr=np.zeros((80, 80, 3), dtype=np.uint8),
         )
 
 
@@ -147,3 +148,49 @@ def test_service_explicit_thresholds_override_env(monkeypatch) -> None:
 
     assert response.face_detected is True
     assert response.liveness_label == 'live'
+
+
+def test_service_populates_pose_and_uses_context_crop(monkeypatch) -> None:
+    from fas import service as service_module
+
+    monkeypatch.setattr(
+        service_module,
+        'decode_base64_image_to_bgr',
+        lambda _: DecodeStub(image_bgr=np.zeros((480, 640, 3), dtype=np.uint8), error=None),
+    )
+
+    # Fake detector returning a context_crop_bgr and 5 frontal landmarks
+    class FakeDetectorWithContext:
+        unavailable_reason = None
+        def detect(self, image_bgr):
+            return FaceDetection(
+                bbox_xyxy=(100, 100, 200, 200),
+                landmarks=[(285.0, 220.0), (355.0, 220.0), (320.0, 260.0),
+                           (290.0, 300.0), (350.0, 300.0)],   # near-frontal
+                aligned_crop_bgr=np.zeros((80, 80, 3), dtype=np.uint8),
+                context_crop_bgr=np.zeros((200, 200, 3), dtype=np.uint8),
+            )
+
+    # Liveness model expects to receive the context crop (200x200), not the aligned 80x80
+    class FakeContextLivenessModel:
+        is_ready = True
+        unavailable_reason = None
+        def predict_live_score(self, face_crop_bgr):
+            assert face_crop_bgr.shape[:2] == (200, 200), (
+                f'expected context crop 200x200, got {face_crop_bgr.shape}'
+            )
+            return 0.91
+
+    service = LivenessService(
+        detector=FakeDetectorWithContext(),
+        liveness_model=FakeContextLivenessModel(),
+        threshold_live=0.9,
+        threshold_spoof=0.3,
+    )
+    response = service.infer(LivenessInferRequest(image_base64='x'))
+
+    assert response.liveness_score == 0.91
+    assert response.liveness_label == 'live'
+    assert response.pose_ok is True
+    assert response.yaw_deg is not None
+    assert abs(response.yaw_deg) < 30   # near-frontal landmarks → small yaw

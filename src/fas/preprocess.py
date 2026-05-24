@@ -64,3 +64,42 @@ def resize_bgr_image(image_bgr: np.ndarray, image_size: int) -> np.ndarray:
         raise RuntimeError('OpenCV is required for resize operations.') from exc
 
     return cv2.resize(image_bgr, (image_size, image_size), interpolation=cv2.INTER_LINEAR)
+
+
+def pad_to_square_then_resize(
+    image_bgr: np.ndarray,
+    size: int,
+    pad_value: tuple[int, int, int] | int | None = None,
+) -> np.ndarray:
+    """Pad a BGR image to a square (centered), then resize to (size, size).
+
+    pad_value: int (greyscale), 3-tuple (BGR), or None to use per-channel mean.
+    """
+    if image_bgr.size == 0:
+        raise ValueError('image_bgr is empty')
+
+    try:
+        import cv2  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError('OpenCV is required for pad_to_square_then_resize.') from exc
+
+    h, w = image_bgr.shape[:2]
+    side = max(h, w)
+    pad_top = (side - h) // 2
+    pad_bottom = side - h - pad_top
+    pad_left = (side - w) // 2
+    pad_right = side - w - pad_left
+
+    if pad_value is None:
+        mean_bgr = image_bgr.reshape(-1, image_bgr.shape[2]).mean(axis=0)
+        pad_value = tuple(int(v) for v in mean_bgr.tolist())
+    elif isinstance(pad_value, int):
+        pad_value = (pad_value, pad_value, pad_value)
+
+    padded = cv2.copyMakeBorder(
+        image_bgr,
+        pad_top, pad_bottom, pad_left, pad_right,
+        borderType=cv2.BORDER_CONSTANT,
+        value=pad_value,
+    )
+    return cv2.resize(padded, (size, size), interpolation=cv2.INTER_LINEAR)

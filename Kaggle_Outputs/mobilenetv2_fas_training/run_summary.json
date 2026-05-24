@@ -1,6 +1,7 @@
 {
   "best_acer": 0.001578824672926311,
   "image_size": 112,
+  "preprocessing": "div255_only",
   "best_checkpoint": "/kaggle/working/mobilenetv2_fas_training/best_mobilenetv2.pt",
   "scripted_checkpoint": "/kaggle/working/mobilenetv2_fas_training/mobilenetv2_fas_scripted.pt"
 }
