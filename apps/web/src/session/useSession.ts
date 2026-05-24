@@ -30,6 +30,10 @@ export interface SessionState {
   latest_yaw: number | null
   latest_passive: number | null
   face_detected: boolean
+  /** Tight face bbox in capture coordinates (640×480) — for overlay drawing */
+  latest_bbox: [number, number, number, number] | null
+  /** 5 landmarks [left_eye, right_eye, nose, mouth_left, mouth_right] in capture coords */
+  latest_landmarks: [number, number][] | null
   error: string | null
 }
 
@@ -61,6 +65,8 @@ function initialState(): SessionState {
     latest_yaw: null,
     latest_passive: null,
     face_detected: false,
+    latest_bbox: null,
+    latest_landmarks: null,
     error: null,
   }
 }
@@ -199,6 +205,8 @@ export function useSession(
         latest_yaw: payload.yaw_deg,
         latest_passive: payload.liveness_score,
         face_detected: payload.face_detected,
+        latest_bbox: payload.face_bbox_xyxy ?? null,
+        latest_landmarks: (payload.face_landmarks as [number, number][] | null) ?? null,
         error: null,
       }))
 

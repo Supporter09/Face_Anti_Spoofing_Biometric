@@ -154,6 +154,16 @@ button:disabled {
   transform: scaleX(-1);
 }
 
+/* Bbox + landmark overlay — same mirror transform as the video */
+.session-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: scaleX(-1);
+  pointer-events: none;
+}
+
 .session-instruction {
   position: absolute;
   left: 0;

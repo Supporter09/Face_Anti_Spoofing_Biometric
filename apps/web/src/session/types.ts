@@ -47,5 +47,9 @@ export interface FrameApiResponse {
   yaw_deg: number | null
   pitch_deg: number | null
   pose_ok: boolean
+  /** [x1, y1, x2, y2] in capture-image pixel coordinates (640×480) */
+  face_bbox_xyxy: [number, number, number, number] | null
+  /** 5 landmarks: [left_eye, right_eye, nose, mouth_left, mouth_right] each as [x, y] */
+  face_landmarks: [number, number][] | null
   message?: string | null
 }
