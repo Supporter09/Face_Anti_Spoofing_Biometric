@@ -1,4 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+
+import { ResultView } from './session/ResultView'
+import { SessionView } from './session/SessionView'
+import { useSession } from './session/useSession'
 
 type LivenessLabel = 'live' | 'spoof' | 'no_face' | 'uncertain'
 
@@ -16,7 +20,14 @@ const SCORE_WINDOW_SIZE = 5
 const THRESHOLD_LIVE = 0.85
 const THRESHOLD_SPOOF = 0.35
 
-function App() {
+async function startCamera(videoRef: React.RefObject<HTMLVideoElement | null>) {
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+  if (!videoRef.current) return
+  videoRef.current.srcObject = stream
+  await videoRef.current.play()
+}
+
+function LegacyApp() {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const scoreWindowRef = useRef<number[]>([])
@@ -31,25 +42,25 @@ function App() {
 
   const statusTone = useMemo(() => {
     switch (smoothedLabel) {
-      case 'live':      return 'good'
-      case 'spoof':     return 'bad'
+      case 'live': return 'good'
+      case 'spoof': return 'bad'
       case 'uncertain': return 'warn'
-      default:          return 'neutral'
+      default: return 'neutral'
     }
   }, [smoothedLabel])
 
-  function onScoreReceived(score: number) {
+  const onScoreReceived = useCallback((score: number) => {
     const w = scoreWindowRef.current
     w.push(score)
     if (w.length > SCORE_WINDOW_SIZE) w.shift()
     const avg = w.reduce((a, b) => a + b, 0) / w.length
     setSmoothedScore(avg)
     setSmoothedLabel(
-      avg >= THRESHOLD_LIVE ? 'live' : avg <= THRESHOLD_SPOOF ? 'spoof' : 'uncertain'
+      avg >= THRESHOLD_LIVE ? 'live' : avg <= THRESHOLD_SPOOF ? 'spoof' : 'uncertain',
     )
-  }
+  }, [])
 
-  function captureFrameBase64(): string | null {
+  const captureFrameBase64 = useCallback((): string | null => {
     const video = videoRef.current
     const canvas = canvasRef.current
     if (!video || !canvas) return null
@@ -60,9 +71,9 @@ function App() {
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
     const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
     return dataUrl.split(',')[1]
-  }
+  }, [])
 
-  function captureAndSendAsync() {
+  const captureAndSendAsync = useCallback(() => {
     const imageBase64 = captureFrameBase64()
     if (!imageBase64) return
     fetch(`${API_BASE}/v1/liveness/infer`, {
@@ -70,13 +81,13 @@ function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image_base64: imageBase64 }),
     })
-      .then(r => r.ok ? r.json() : Promise.reject(new Error(`API ${r.status}`)))
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error(`API ${r.status}`)))
       .then((payload: InferResponse) => {
         setResult(payload)
         if (payload.face_detected) onScoreReceived(payload.liveness_score)
       })
       .catch(() => { /* silent in continuous mode */ })
-  }
+  }, [captureFrameBase64, onScoreReceived])
 
   async function captureAndScan() {
     if (!videoRef.current || !canvasRef.current) return
@@ -101,12 +112,9 @@ function App() {
     }
   }
 
-  async function startCamera() {
+  async function startLegacyCamera() {
     setError(null)
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
-    if (!videoRef.current) return
-    videoRef.current.srcObject = stream
-    await videoRef.current.play()
+    await startCamera(videoRef)
     setCameraReady(true)
   }
 
@@ -142,17 +150,17 @@ function App() {
         if (!ctx) return
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
         canvas.toBlob(
-          blob => blob?.arrayBuffer().then(buf => wsRef.current?.send(buf)),
+          (blob) => blob?.arrayBuffer().then((buf) => wsRef.current?.send(buf)),
           'image/jpeg',
           0.7,
         )
       }, 100)
       return () => clearInterval(id)
-    } else {
-      const id = setInterval(captureAndSendAsync, POLL_INTERVAL_MS)
-      return () => clearInterval(id)
     }
-  }, [cameraReady, wsMode])
+
+    const id = setInterval(captureAndSendAsync, POLL_INTERVAL_MS)
+    return () => clearInterval(id)
+  }, [cameraReady, captureAndSendAsync, wsMode])
 
   return (
     <main className="page-shell">
@@ -163,7 +171,7 @@ function App() {
           Browser webcam capture with a FastAPI liveness backend powered by MobileNetV2.
         </p>
         <div className="actions">
-          <button onClick={() => void startCamera()} disabled={cameraReady || busy}>
+          <button onClick={() => void startLegacyCamera()} disabled={cameraReady || busy}>
             {cameraReady ? 'Camera Ready' : 'Start Camera'}
           </button>
           <button onClick={() => void captureAndScan()} disabled={!cameraReady || busy}>
@@ -201,6 +209,30 @@ function App() {
         </div>
       </section>
     </main>
+  )
+}
+
+function App() {
+  const isLegacy = new URLSearchParams(window.location.search).has('legacy')
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const { state, start, reset } = useSession(videoRef, canvasRef)
+
+  useEffect(() => {
+    if (!isLegacy) void startCamera(videoRef)
+  }, [isLegacy])
+
+  if (isLegacy) return <LegacyApp />
+
+  if (state.phase === 'result' && state.verdict) {
+    return <ResultView verdict={state.verdict} turn_A_dir={state.turn_A_dir!} onRetry={reset} />
+  }
+
+  return (
+    <>
+      <SessionView videoRef={videoRef} state={state} onStart={start} onReset={reset} />
+      <canvas ref={canvasRef} hidden />
+    </>
   )
 }
 
