@@ -11,8 +11,8 @@ export const MAX_YAW_JUMP = 15 // degrees; consecutive jump > this = suspect fra
 // solvePnP with approximate focal length gives a constant offset (typically 10-20°),
 // so absolute thresholds are unreliable. Using relative yaw makes the challenge
 // robust to camera position, FOV, and solvePnP calibration offset.
-export const YAW_TARGET = 12 // minimum relative yaw for turn phases
-export const YAW_CENTER = 8  // maximum |relative yaw| for forward/center phases
+export const YAW_TARGET = 10 // minimum relative yaw for turn phases (lowered from 12 for real-world robustness)
+export const YAW_CENTER = 10 // maximum |relative yaw| for forward/center phases (loosened from 8)
 
 export function evaluateChallenge(
   frames: FrameRecord[],
@@ -70,10 +70,15 @@ export function evaluateChallenge(
 
   const rel = (yaw: number) => yaw - yawBaseline
 
-  // Forward phase: relative yaw must be centred (within ±YAW_CENTER).
+  // Forward phase: at least 60% of frames must be centred (within ±YAW_CENTER).
+  // Using every() was too strict — a single outlier at the start/end of the phase
+  // (captured while transitioning from countdown) would incorrectly fail the check.
+  // The phase-advancement logic in useSession already guarantees 5 consecutive
+  // frontal frames were seen; this 60% check is a light sanity guard only.
   const forwardFrames = frames.filter((f) => f.phase === 'forward' && f.yaw_deg !== null)
+  const frontalCount = forwardFrames.filter((f) => Math.abs(rel(f.yaw_deg!)) <= YAW_CENTER).length
   const forwardPass =
-    forwardFrames.length === 0 || forwardFrames.every((f) => Math.abs(rel(f.yaw_deg!)) <= YAW_CENTER)
+    forwardFrames.length === 0 || frontalCount / forwardFrames.length >= 0.60
 
   // Turn-A phase: relative yaw must reach ±YAW_TARGET in the required direction.
   const turnAFrames = frames.filter((f) => f.phase === 'turn_A' && f.yaw_deg !== null)

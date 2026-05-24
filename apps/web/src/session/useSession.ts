@@ -12,10 +12,10 @@ const CAPTURE_HEIGHT = 480
 const JPEG_QUALITY = 0.85
 
 const PHASE_TIMEOUT_MS: Record<FrameRecord['phase'], number> = {
-  forward: 2000,
-  turn_A: 3000,
-  center_1: 2000,
-  turn_B: 3000,
+  forward: 3000,  // 2s was tight if camera startup adds latency at phase start
+  turn_A: 4000,   // extended from 3s — solvePnP underestimates range, need more time
+  center_1: 2500,
+  turn_B: 4000,   // extended from 3s
 }
 
 const ACTIVE_PHASES: Phase[] = ['forward', 'turn_A', 'center_1', 'turn_B']

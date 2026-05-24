@@ -51,7 +51,8 @@ describe('computeVerdict', () => {
   })
 
   it('returns SPOOF when turn_A never reaches target yaw', () => {
-    const frames = passingFrames().map((f) => (f.phase === 'turn_A' ? { ...f, yaw_deg: 12 } : f))
+    // Forward baseline ≈ 1 (mean of [0, 2]); turn_A at yaw=9 → relative=8 < YAW_TARGET(10)
+    const frames = passingFrames().map((f) => (f.phase === 'turn_A' ? { ...f, yaw_deg: 9 } : f))
     const verdict = computeVerdict(frames, 'right', 5000)
 
     expect(verdict.verdict).toBe('SPOOF')
