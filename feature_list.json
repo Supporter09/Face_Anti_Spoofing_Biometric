@@ -49,6 +49,19 @@
       ]
     },
     {
+      "id": "feat-006",
+      "name": "Hybrid context + challenge liveness",
+      "status": "blocked",
+      "owner": "backend-ml-frontend",
+      "dependencies": ["feat-002", "feat-003", "feat-004"],
+      "definition_of_done": [
+        "Context model notebook runs on Kaggle",
+        "Backend frame endpoint returns passive score and pose",
+        "Frontend session challenge is implemented",
+        "Tier 1 and Tier 2 reports are populated"
+      ]
+    },
+    {
       "id": "feat-005",
       "name": "Paper workspace",
       "status": "in_progress",

@@ -34,10 +34,27 @@
 
 - Threshold policy selection for production-like behavior (`live`, `spoof`, `uncertain`).
 - Error analysis of hard live samples scored as spoof and hard spoof samples scored as live.
+- Hybrid context + challenge liveness implementation is halted at Task 10: notebook 07 is prepared and committed; Kaggle full training is waiting for human upload/run.
+
+## Completed This Session
+
+- Phase 1 backend helpers and pose completed:
+  - `pad_to_square_then_resize`
+  - context crop prep support
+  - 5-landmark head pose estimation
+- Phase 2 backend integration completed:
+  - `FaceDetection.context_crop_bgr`
+  - detector context crop output
+  - pose fields in response schema
+  - service uses context crop and populates pose
+  - `/v1/liveness/frame` endpoint
+  - backend smoke with generated blank frame returned pose fields (`pose_ok=false`, no face)
+- Task 10 notebook preparation completed:
+  - `notebooks/kaggle_full_07_train_context_mobilenetv2.ipynb`
 
 ## Next
 
-1. Run real webcam sessions and record outcomes by condition (normal light, low light, phone-screen replay, printed photo).
-2. Measure live false-reject vs spoof false-accept tradeoff for current candidate thresholds (`spoof=0.10`, `live=0.80`).
-3. Save benchmark/eval evidence under `reports/` and update threshold recommendation.
-4. Launch second training iteration focused on hard examples and class overlap reduction.
+1. Upload `notebooks/kaggle_full_07_train_context_mobilenetv2.ipynb` to Kaggle with the CelebA-Spoof dataset attached.
+2. Run the notebook end-to-end with full data (`limit=None`).
+3. Download outputs into `Kaggle_Outputs/context_mobilenetv2_224/`.
+4. Resume from Task 10 Step 16, then continue Phase 4 after the model artifacts exist.

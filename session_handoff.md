@@ -14,9 +14,9 @@
 
 ## Current Focus
 
-- Calibrate threshold policy using `Kaggle_Outputs/celeba_spoof_eval_full_03/threshold_metrics.csv`.
-- Validate backend decisions with real webcam frames using loaded scripted model.
-- Reduce false-reject pressure on live users while controlling spoof-accepted risk.
+- Hybrid context + challenge liveness implementation is halted at Task 10.
+- Notebook 07 is prepared and committed: `notebooks/kaggle_full_07_train_context_mobilenetv2.ipynb`.
+- Next human action: upload notebook 07 to Kaggle, attach CelebA-Spoof, run full data, then download outputs to `Kaggle_Outputs/context_mobilenetv2_224/`.
 
 ## Known Risks
 
@@ -25,3 +25,5 @@
 - Current fixed thresholds (`live>=0.9`, `spoof<=0.3`) produce many live samples labeled spoof on eval data.
 - Single-threshold best ACER from current run (`0.1`) still indicates meaningful class overlap; more training/error analysis is needed.
 - Frontend package installs may fail without writable npm cache unless `HOME`/`npm_config_cache` are redirected.
+- Local notebook smoke was not run: `jupyter`/`nbconvert` is not installed locally and the Kaggle CelebA-Spoof path is not mounted.
+- Sandboxed local socket access blocks uvicorn/client smoke tests; use escalated commands for local API smoke verification.
