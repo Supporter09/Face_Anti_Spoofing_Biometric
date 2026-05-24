@@ -51,7 +51,7 @@
     {
       "id": "feat-006",
       "name": "Hybrid context + challenge liveness",
-      "status": "blocked",
+      "status": "in_progress",
       "owner": "backend-ml-frontend",
       "dependencies": ["feat-002", "feat-003", "feat-004"],
       "definition_of_done": [
