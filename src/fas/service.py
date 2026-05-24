@@ -5,6 +5,7 @@ from time import perf_counter
 
 from fas.detection import InsightFaceDetector
 from fas.liveness_model import TorchLivenessModel
+from fas.pose import estimate_head_pose
 from fas.preprocess import decode_base64_image_to_bgr
 from fas.schemas import LivenessInferRequest, LivenessInferResponse
 from fas.types import FaceDetector, LivenessModel
@@ -73,8 +74,21 @@ class LivenessService:
                 message=message,
             )
 
-        live_score = self.liveness_model.predict_live_score(detection.aligned_crop_bgr)
+        crop_for_model = (
+            detection.context_crop_bgr
+            if detection.context_crop_bgr is not None
+            else detection.aligned_crop_bgr
+        )
+
+        live_score = self.liveness_model.predict_live_score(crop_for_model)
         label = self._label_from_score(live_score)
+
+        pose = None
+        if len(detection.landmarks) == 5:
+            try:
+                pose = estimate_head_pose(detection.landmarks, decoded.image_bgr.shape)
+            except Exception:
+                pose = None
 
         if self.liveness_model.is_ready:
             message = 'Face detected and liveness score computed by loaded model.'
@@ -89,6 +103,7 @@ class LivenessService:
             message=message,
             face_bbox_xyxy=list(detection.bbox_xyxy),
             face_landmarks=[[x, y] for x, y in detection.landmarks],
+            pose=pose,
         )
 
     def _label_from_score(self, live_score: float) -> str:
@@ -126,6 +141,7 @@ class LivenessService:
         message: str,
         face_bbox_xyxy: list[int] | None = None,
         face_landmarks: list[list[float]] | None = None,
+        pose: dict[str, float] | None = None,
     ) -> LivenessInferResponse:
         return LivenessInferResponse(
             face_detected=face_detected,
@@ -135,4 +151,7 @@ class LivenessService:
             message=message,
             face_bbox_xyxy=face_bbox_xyxy,
             face_landmarks=face_landmarks,
+            yaw_deg=pose['yaw_deg'] if pose and pose.get('ok') else None,
+            pitch_deg=pose['pitch_deg'] if pose and pose.get('ok') else None,
+            pose_ok=bool(pose and pose.get('ok')),
         )
