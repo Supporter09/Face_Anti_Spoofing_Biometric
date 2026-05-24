@@ -29,6 +29,11 @@ def infer_liveness(payload: LivenessInferRequest) -> LivenessInferResponse:
     return service.infer(payload)
 
 
+@app.post('/v1/liveness/frame', response_model=LivenessInferResponse)
+def infer_frame(payload: LivenessInferRequest) -> LivenessInferResponse:
+    return service.infer(payload)
+
+
 @app.websocket("/ws/liveness")
 async def ws_liveness(websocket: WebSocket) -> None:
     await websocket.accept()
