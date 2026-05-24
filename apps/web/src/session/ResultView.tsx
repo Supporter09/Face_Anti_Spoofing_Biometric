@@ -71,13 +71,13 @@ export function ResultView({ verdict, turn_A_dir, onRetry }: Props) {
           {!isLive ? (
             <>
               <div>
-                <dt>Max yaw left</dt>
+                <dt>Quay trái (rel.)</dt>
                 <dd>
                   {verdict.challenge_eval.max_yaw_left?.toFixed(1) ?? '—'}° / -{YAW_TARGET}°
                 </dd>
               </div>
               <div>
-                <dt>Max yaw right</dt>
+                <dt>Quay phải (rel.)</dt>
                 <dd>
                   {verdict.challenge_eval.max_yaw_right?.toFixed(1) ?? '—'}° / +{YAW_TARGET}°
                 </dd>

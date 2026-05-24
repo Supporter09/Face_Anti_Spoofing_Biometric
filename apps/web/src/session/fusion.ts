@@ -5,9 +5,14 @@ import type { ChallengeEval, FrameRecord, TurnDirection, Verdict } from './types
 export const T_PASSIVE = 0.4
 
 export const MIN_DETECT_RATE = 0.9
-export const MAX_YAW_JUMP = 15
-export const YAW_TARGET = 20
-export const YAW_CENTER = 10
+export const MAX_YAW_JUMP = 15 // degrees; consecutive jump > this = suspect frame swap
+
+// Relative-yaw thresholds — measured as delta from the forward-phase baseline.
+// solvePnP with approximate focal length gives a constant offset (typically 10-20°),
+// so absolute thresholds are unreliable. Using relative yaw makes the challenge
+// robust to camera position, FOV, and solvePnP calibration offset.
+export const YAW_TARGET = 12 // minimum relative yaw for turn phases
+export const YAW_CENTER = 8  // maximum |relative yaw| for forward/center phases
 
 export function evaluateChallenge(
   frames: FrameRecord[],
@@ -37,6 +42,8 @@ export function evaluateChallenge(
     }
   }
 
+  // Check for suspicious yaw jumps (frame swap attack indicator).
+  // Operates on raw yaw (not relative) — consecutive frame diffs should be small.
   const yawFrames = frames.filter((f) => f.yaw_deg !== null)
   for (let i = 1; i < yawFrames.length; i++) {
     if (Math.abs(yawFrames[i].yaw_deg! - yawFrames[i - 1].yaw_deg!) > MAX_YAW_JUMP) {
@@ -50,33 +57,57 @@ export function evaluateChallenge(
     }
   }
 
-  const forwardFrames = frames.filter((f) => f.phase === 'forward' && f.yaw_deg !== null)
-  const forwardPass = forwardFrames.length === 0 || forwardFrames.every((f) => Math.abs(f.yaw_deg!) <= YAW_CENTER)
+  // Compute yaw baseline from forward-phase frames.
+  // solvePnP with approximate intrinsics gives a consistent offset; subtracting the
+  // mean forward-phase yaw normalises it so thresholds work regardless of camera setup.
+  const forwardYawValues = frames
+    .filter((f) => f.phase === 'forward' && f.yaw_deg !== null)
+    .map((f) => f.yaw_deg!)
+  const yawBaseline =
+    forwardYawValues.length > 0
+      ? forwardYawValues.reduce((a, b) => a + b, 0) / forwardYawValues.length
+      : 0
 
+  const rel = (yaw: number) => yaw - yawBaseline
+
+  // Forward phase: relative yaw must be centred (within ±YAW_CENTER).
+  const forwardFrames = frames.filter((f) => f.phase === 'forward' && f.yaw_deg !== null)
+  const forwardPass =
+    forwardFrames.length === 0 || forwardFrames.every((f) => Math.abs(rel(f.yaw_deg!)) <= YAW_CENTER)
+
+  // Turn-A phase: relative yaw must reach ±YAW_TARGET in the required direction.
   const turnAFrames = frames.filter((f) => f.phase === 'turn_A' && f.yaw_deg !== null)
-  const turnATargetYaw = turn_A_dir === 'right' ? YAW_TARGET : -YAW_TARGET
   const turnAPass = turnAFrames.some((f) =>
-    turn_A_dir === 'right' ? f.yaw_deg! >= turnATargetYaw : f.yaw_deg! <= turnATargetYaw,
+    turn_A_dir === 'right' ? rel(f.yaw_deg!) >= YAW_TARGET : rel(f.yaw_deg!) <= -YAW_TARGET,
   )
 
+  // Center-1 phase: relative yaw back within ±YAW_CENTER.
   const center1Frames = frames.filter((f) => f.phase === 'center_1' && f.yaw_deg !== null)
-  const center1Pass = center1Frames.length === 0 || center1Frames.some((f) => Math.abs(f.yaw_deg!) <= YAW_CENTER)
+  const center1Pass =
+    center1Frames.length === 0 || center1Frames.some((f) => Math.abs(rel(f.yaw_deg!)) <= YAW_CENTER)
 
+  // Turn-B phase: relative yaw to the opposite direction.
   const turnBDir: TurnDirection = turn_A_dir === 'right' ? 'left' : 'right'
   const turnBFrames = frames.filter((f) => f.phase === 'turn_B' && f.yaw_deg !== null)
-  const turnBTargetYaw = turnBDir === 'right' ? YAW_TARGET : -YAW_TARGET
   const turnBPass = turnBFrames.some((f) =>
-    turnBDir === 'right' ? f.yaw_deg! >= turnBTargetYaw : f.yaw_deg! <= turnBTargetYaw,
+    turnBDir === 'right' ? rel(f.yaw_deg!) >= YAW_TARGET : rel(f.yaw_deg!) <= -YAW_TARGET,
   )
 
-  const allYaws = frames.filter((f) => f.yaw_deg !== null).map((f) => f.yaw_deg!)
-  const max_yaw_left = allYaws.length ? Math.min(...allYaws) : null
-  const max_yaw_right = allYaws.length ? Math.max(...allYaws) : null
+  // Report max relative yaw in each direction for the result display.
+  const allRelYaws = frames
+    .filter((f) => f.yaw_deg !== null)
+    .map((f) => rel(f.yaw_deg!))
+  const max_yaw_left = allRelYaws.length ? Math.min(...allRelYaws) : null
+  const max_yaw_right = allRelYaws.length ? Math.max(...allRelYaws) : null
 
-  if (!forwardPass) return { pass: false, detect_rate, max_yaw_left, max_yaw_right, reason: 'forward_not_frontal' }
-  if (!turnAPass) return { pass: false, detect_rate, max_yaw_left, max_yaw_right, reason: 'turn_A_insufficient' }
-  if (!center1Pass) return { pass: false, detect_rate, max_yaw_left, max_yaw_right, reason: 'center_1_not_frontal' }
-  if (!turnBPass) return { pass: false, detect_rate, max_yaw_left, max_yaw_right, reason: 'turn_B_insufficient' }
+  if (!forwardPass)
+    return { pass: false, detect_rate, max_yaw_left, max_yaw_right, reason: 'forward_not_frontal' }
+  if (!turnAPass)
+    return { pass: false, detect_rate, max_yaw_left, max_yaw_right, reason: 'turn_A_insufficient' }
+  if (!center1Pass)
+    return { pass: false, detect_rate, max_yaw_left, max_yaw_right, reason: 'center_1_not_frontal' }
+  if (!turnBPass)
+    return { pass: false, detect_rate, max_yaw_left, max_yaw_right, reason: 'turn_B_insufficient' }
 
   return { pass: true, detect_rate, max_yaw_left, max_yaw_right }
 }

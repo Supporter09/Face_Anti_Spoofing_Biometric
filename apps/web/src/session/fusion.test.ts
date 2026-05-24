@@ -92,10 +92,13 @@ describe('computeVerdict', () => {
 })
 
 describe('evaluateChallenge', () => {
-  it('tracks max left and right yaw for passing sessions', () => {
+  it('tracks max left and right relative yaw for passing sessions', () => {
+    // passingFrames(): forward yaws are [0, 2] → baseline = 1
+    // turn_B min raw = -25 → relative = -25 - 1 = -26
+    // turn_A max raw = 25  → relative = 25  - 1 = 24
     const result = evaluateChallenge(passingFrames(), 'right')
 
-    expect(result.max_yaw_left).toBe(-25)
-    expect(result.max_yaw_right).toBe(25)
+    expect(result.max_yaw_left).toBe(-26)
+    expect(result.max_yaw_right).toBe(24)
   })
 })

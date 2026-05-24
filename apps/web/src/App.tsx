@@ -224,14 +224,20 @@ function App() {
 
   if (isLegacy) return <LegacyApp />
 
-  if (state.phase === 'result' && state.verdict) {
-    return <ResultView verdict={state.verdict} turn_A_dir={state.turn_A_dir!} onRetry={reset} />
-  }
+  // Keep SessionView (and its <video> element) always mounted so the camera stream
+  // is never dropped between sessions. Hiding it with CSS instead of unmounting
+  // prevents the stream from dying when the user clicks "Thử lại".
+  const showResult = state.phase === 'result' && state.verdict != null
 
   return (
     <>
-      <SessionView videoRef={videoRef} state={state} onStart={start} onReset={reset} />
+      <div style={showResult ? { display: 'none' } : undefined}>
+        <SessionView videoRef={videoRef} state={state} onStart={start} onReset={reset} />
+      </div>
       <canvas ref={canvasRef} hidden />
+      {showResult && (
+        <ResultView verdict={state.verdict!} turn_A_dir={state.turn_A_dir!} onRetry={reset} />
+      )}
     </>
   )
 }
