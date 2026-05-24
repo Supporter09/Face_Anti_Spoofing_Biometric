@@ -9,15 +9,15 @@ if [[ ! -x ".venv/bin/python" ]]; then
   exit 1
 fi
 
-MODEL_PATH="${LIVENESS_MODEL_PATH:-${ROOT_DIR}/Kaggle_Outputs/mobilenetv2_fas_training/mobilenetv2_fas_scripted.pt}"
+MODEL_PATH="${LIVENESS_MODEL_PATH:-${ROOT_DIR}/Kaggle_Outputs/context_mobilenetv2_224/mobilenetv2_context_scripted.pt}"
 if [[ ! -f "${MODEL_PATH}" ]]; then
   echo "Model checkpoint not found: ${MODEL_PATH}"
   exit 1
 fi
 
 export LIVENESS_MODEL_PATH="${MODEL_PATH}"
-export LIVENESS_SPOOF_THRESHOLD="${LIVENESS_SPOOF_THRESHOLD:-0.35}"
-export LIVENESS_LIVE_THRESHOLD="${LIVENESS_LIVE_THRESHOLD:-0.85}"
+export LIVENESS_SPOOF_THRESHOLD="${LIVENESS_SPOOF_THRESHOLD:-0.3}"
+export LIVENESS_LIVE_THRESHOLD="${LIVENESS_LIVE_THRESHOLD:-0.5}"
 
 echo "Starting backend with:"
 echo "  LIVENESS_MODEL_PATH=${LIVENESS_MODEL_PATH}"
