@@ -7,6 +7,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from fas.schemas import LivenessInferRequest, LivenessInferResponse
 from fas.service import LivenessService
+from fas.auth_schemas import (
+    FaceEnrollRequest,
+    FaceEnrollResponse,
+    FaceVerifyRequest,
+    FaceVerifyResponse,
+)
+from fas.auth_service import FaceAuthService
 
 app = FastAPI(title='Face Anti-Spoofing API', version='0.1.0')
 app.add_middleware(
@@ -17,7 +24,7 @@ app.add_middleware(
     allow_headers=['*'],
 )
 service = LivenessService()
-
+auth_service = FaceAuthService()
 
 @app.get('/health')
 def health() -> dict[str, str]:
@@ -33,6 +40,14 @@ def infer_liveness(payload: LivenessInferRequest) -> LivenessInferResponse:
 def infer_frame(payload: LivenessInferRequest) -> LivenessInferResponse:
     return service.infer(payload)
 
+@app.post("/v1/auth/enroll", response_model=FaceEnrollResponse)
+def enroll_face(payload: FaceEnrollRequest) -> FaceEnrollResponse:
+    return auth_service.enroll(payload)
+
+
+@app.post("/v1/auth/verify", response_model=FaceVerifyResponse)
+def verify_face(payload: FaceVerifyRequest) -> FaceVerifyResponse:
+    return auth_service.verify(payload)
 
 @app.websocket("/ws/liveness")
 async def ws_liveness(websocket: WebSocket) -> None:
