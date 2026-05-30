@@ -38,6 +38,23 @@
 
 ## Completed This Session
 
+- Added debug capture API route `POST /v1/liveness/frame/debug` that stores request frame + response metadata per `session_id` under `reports/liveness_debug_frames` (override root with `LIVENESS_DEBUG_CAPTURE_ROOT`).
+- Updated runtime liveness model input size default to `224` to match the context MobileNetV2 training/inference contract.
+- Updated debug artifacts to save:
+  - overlay frame with score + bbox + 5 landmarks
+  - context-padded crop used by backend model pipeline
+  - resized model input image and JSON metadata
+- Wired frontend session flow to support debug capture mode via URL flags:
+  - `?capture_debug=1`
+  - `&capture_session=<name>`
+  When enabled, frame submissions go to `/v1/liveness/frame/debug`.
+- Added API test coverage for debug route persistence:
+  - `tests/api/test_frame_endpoint.py::test_frame_debug_endpoint_saves_request_and_metadata`
+- Verified:
+  - `python -m pytest tests/api -q`
+  - `cd apps/web && npm run typecheck`
+  - `cd apps/web && npm run lint`
+
 - Switched `scripts/run_backend_demo.sh` default model to `Kaggle_Outputs/context_mobilenetv2_224/mobilenetv2_context_scripted.pt`.
 - Set demo thresholds to bracket the trained decision threshold: spoof `0.3`, live `0.5`, with `T_PASSIVE=0.4` used in browser fusion.
 - Added Vitest/jsdom/testing-library setup for `apps/web`.

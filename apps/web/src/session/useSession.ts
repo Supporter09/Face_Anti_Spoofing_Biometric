@@ -84,9 +84,12 @@ export function useSession(
   reset: () => void
   isDiagnose: boolean
 } {
+  const searchParams = new URLSearchParams(window.location.search)
   // Diagnose mode: all phases run to timeout; no early advancement.
   // Activate via ?diagnose=1 in URL.
-  const isDiagnose = new URLSearchParams(window.location.search).has('diagnose')
+  const isDiagnose = searchParams.has('diagnose')
+  const captureDebug = searchParams.get('capture_debug') === '1'
+  const captureSessionId = searchParams.get('capture_session') ?? 'web_session'
 
   const [state, setState] = useState<SessionState>(initialState)
   const stateRef = useRef(state)
@@ -174,7 +177,10 @@ export function useSession(
 
     inFlightRef.current = true
     try {
-      const response = await fetch(`${API_BASE}/v1/liveness/frame`, {
+      const frameEndpoint = captureDebug
+        ? `/v1/liveness/frame/debug?session_id=${encodeURIComponent(captureSessionId)}`
+        : '/v1/liveness/frame'
+      const response = await fetch(`${API_BASE}${frameEndpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image_base64: imageBase64 }),
@@ -227,7 +233,7 @@ export function useSession(
     } finally {
       inFlightRef.current = false
     }
-  }, [advanceFrom, captureFrameBase64, phaseCriterionMet])
+  }, [advanceFrom, captureDebug, captureFrameBase64, captureSessionId, isDiagnose, phaseCriterionMet])
 
   useEffect(() => {
     if (state.phase !== 'countdown') return
