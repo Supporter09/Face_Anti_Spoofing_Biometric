@@ -49,7 +49,7 @@ export function ResultView({ verdict, turn_A_dir, onRetry }: Props) {
           <div>
             <dt>Passive score</dt>
             <dd>
-              {verdict.passive_avg.toFixed(2)} ≥ {T_PASSIVE}
+              {verdict.passive_avg.toFixed(2)} {verdict.passive_avg >= T_PASSIVE ? '≥' : '<'} {T_PASSIVE}
             </dd>
           </div>
           <div>
