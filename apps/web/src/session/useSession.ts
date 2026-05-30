@@ -4,6 +4,7 @@ import { computeVerdict, YAW_CENTER, YAW_TARGET } from './fusion'
 import type { FrameApiResponse, FrameRecord, Phase, TurnDirection, Verdict } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
+
 const CAPTURE_INTERVAL_MS = 100
 const COUNTDOWN_MS = 3000  // 3s so backend JIT warmup (TorchScript first-inference) finishes before first frame
 const REQUIRED_CONSECUTIVE_FRAMES = 5
@@ -35,6 +36,10 @@ export interface SessionState {
   /** 5 landmarks [left_eye, right_eye, nose, mouth_left, mouth_right] in capture coords */
   latest_landmarks: [number, number][] | null
   error: string | null
+  auth_status: 'idle' | 'verifying' | 'authenticated' | 'failed'
+  auth_message: string | null
+  similarity: number | null
+  identified_user: string | null
 }
 
 function getTurnBDir(turn_A_dir: TurnDirection): TurnDirection {
@@ -68,6 +73,10 @@ function initialState(): SessionState {
     latest_bbox: null,
     latest_landmarks: null,
     error: null,
+    auth_status: 'idle',
+    auth_message: null,
+    similarity: null,
+    identified_user: null,
   }
 }
 
@@ -228,6 +237,48 @@ export function useSession(
       inFlightRef.current = false
     }
   }, [advanceFrom, captureFrameBase64, phaseCriterionMet])
+  const authenticate = useCallback(async () => {
+  const imageBase64 = captureFrameBase64()
+  if (!imageBase64) return
+ 
+  setState((s) => ({
+    ...s,
+    auth_status: 'verifying',
+    auth_message: 'Đang xác thực...',
+    identified_user: null,
+  }))
+ 
+  try {
+    const response = await fetch(`${API_BASE}/v1/auth/identify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_base64: imageBase64 }),
+    })
+ 
+    if (!response.ok) {
+      throw new Error(`Auth API failed: ${response.status}`)
+    }
+ 
+    const payload = await response.json()
+    // payload: { authenticated, user_id, similarity, threshold, message }
+ 
+    setState((s) => ({
+      ...s,
+      auth_status: payload.authenticated ? 'authenticated' : 'failed',
+      auth_message: payload.message,
+      similarity: payload.similarity ?? null,
+      identified_user: payload.authenticated ? payload.user_id : null,
+    }))
+  } catch (err) {
+    setState((s) => ({
+      ...s,
+      auth_status: 'failed',
+      auth_message: err instanceof Error ? err.message : 'Authentication failed',
+      identified_user: null,
+    }))
+  }
+}, [captureFrameBase64])
+ 
 
   useEffect(() => {
     if (state.phase !== 'countdown') return
@@ -267,13 +318,22 @@ export function useSession(
   useEffect(() => {
     if (state.phase !== 'evaluating' || !state.turn_A_dir) return
 
-    const verdict = computeVerdict(state.frames, state.turn_A_dir, Date.now() - sessionStartedAtRef.current)
+    const verdict = computeVerdict(
+      state.frames,
+      state.turn_A_dir,
+      Date.now() - sessionStartedAtRef.current,
+    )
+
     setState((current) => ({
       ...current,
       phase: 'result',
       verdict,
       instruction: '',
     }))
+
+    if (verdict.verdict === 'LIVE') {
+      void authenticate()
+    }
   }, [state.frames, state.phase, state.turn_A_dir])
 
   return { state, start, reset, isDiagnose }

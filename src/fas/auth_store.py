@@ -1,52 +1,91 @@
 from __future__ import annotations
 
-import json
-from pathlib import Path
-from typing import Any
+import os
 
 import numpy as np
+import psycopg2
+import psycopg2.extras
+from psycopg2.extensions import connection as PgConnection
+
+
+def _get_connection() -> PgConnection:
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url:
+        raise RuntimeError("DATABASE_URL environment variable is not set.")
+    return psycopg2.connect(database_url)
+
+
+def _init_db() -> None:
+    """Create the face_templates table if it doesn't exist."""
+    with _get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS face_templates (
+                    user_id     TEXT PRIMARY KEY,
+                    embedding   DOUBLE PRECISION[],
+                    enrolled_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            """)
+        conn.commit()
+
+
+# Run once on import — creates table if missing
+_init_db()
 
 
 class FaceTemplateStore:
-    def __init__(self, store_path: str | Path = "data/face_templates.json") -> None:
-        self.store_path = Path(store_path)
-        self.store_path.parent.mkdir(parents=True, exist_ok=True)
-
-        if not self.store_path.exists():
-            self.store_path.write_text("{}", encoding="utf-8")
-
-    def _load(self) -> dict[str, Any]:
-        try:
-            return json.loads(self.store_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            return {}
-
-    def _save(self, data: dict[str, Any]) -> None:
-        self.store_path.write_text(
-            json.dumps(data, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
-
     def save_template(self, user_id: str, embedding: np.ndarray) -> None:
-        data = self._load()
-        data[user_id] = {
-            "embedding": embedding.astype(float).tolist(),
-        }
-        self._save(data)
+        embedding_list = embedding.astype(float).tolist()
+        with _get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO face_templates (user_id, embedding)
+                    VALUES (%s, %s)
+                    ON CONFLICT (user_id) DO UPDATE
+                        SET embedding   = EXCLUDED.embedding,
+                            enrolled_at = NOW()
+                """, (user_id, embedding_list))
+            conn.commit()
 
     def get_template(self, user_id: str) -> np.ndarray | None:
-        data = self._load()
-        user_data = data.get(user_id)
-
-        if not user_data:
+        with _get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT embedding FROM face_templates WHERE user_id = %s",
+                    (user_id,),
+                )
+                row = cur.fetchone()
+        if row is None:
             return None
+        return np.asarray(row[0], dtype=np.float32)
 
-        embedding = user_data.get("embedding")
-        if not embedding:
-            return None
-
-        return np.asarray(embedding, dtype=np.float32)
+    def get_all_templates(self) -> dict[str, np.ndarray]:
+        with _get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT user_id, embedding FROM face_templates")
+                rows = cur.fetchall()
+        return {
+            user_id: np.asarray(embedding, dtype=np.float32)
+            for user_id, embedding in rows
+        }
 
     def user_exists(self, user_id: str) -> bool:
-        data = self._load()
-        return user_id in data
+        with _get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT 1 FROM face_templates WHERE user_id = %s",
+                    (user_id,),
+                )
+                return cur.fetchone() is not None
+
+    def delete_template(self, user_id: str) -> bool:
+        """Remove a user's template. Returns True if a row was deleted."""
+        with _get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM face_templates WHERE user_id = %s",
+                    (user_id,),
+                )
+                deleted = cur.rowcount > 0
+            conn.commit()
+        return deleted

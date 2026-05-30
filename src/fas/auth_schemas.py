@@ -25,3 +25,12 @@ class FaceVerifyResponse(BaseModel):
     similarity: float
     threshold: float
     message: str
+class FaceIdentifyRequest(BaseModel):
+    image_base64: str
+ 
+class FaceIdentifyResponse(BaseModel):
+    authenticated: bool
+    user_id: str | None       # None if no enrolled users or no face detected
+    similarity: float
+    threshold: float
+    message: str

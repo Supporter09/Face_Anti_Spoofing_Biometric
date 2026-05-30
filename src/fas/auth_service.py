@@ -5,6 +5,8 @@ import os
 from fas.auth_schemas import (
     FaceEnrollRequest,
     FaceEnrollResponse,
+    FaceIdentifyRequest,
+    FaceIdentifyResponse,
     FaceVerifyRequest,
     FaceVerifyResponse,
 )
@@ -109,5 +111,58 @@ class FaceAuthService:
                 "Authentication successful."
                 if authenticated
                 else "Face does not match enrolled user."
+            ),
+        )
+
+    def identify(self, request: FaceIdentifyRequest) -> FaceIdentifyResponse:
+        """Compare against all enrolled users, return the closest match."""
+        all_templates = self.store.get_all_templates()
+
+        if not all_templates:
+            return FaceIdentifyResponse(
+                authenticated=False,
+                user_id=None,
+                similarity=0.0,
+                threshold=self.threshold,
+                message="No enrolled users found.",
+            )
+
+        decoded = decode_base64_image_to_bgr(request.image_base64)
+        if decoded.image_bgr is None:
+            return FaceIdentifyResponse(
+                authenticated=False,
+                user_id=None,
+                similarity=0.0,
+                threshold=self.threshold,
+                message=decoded.error or "Could not decode image payload.",
+            )
+
+        current_embedding = self.recognition_model.get_embedding(decoded.image_bgr)
+        if current_embedding is None:
+            reason = self.recognition_model.unavailable_reason
+            return FaceIdentifyResponse(
+                authenticated=False,
+                user_id=None,
+                similarity=0.0,
+                threshold=self.threshold,
+                message=reason or "No face detected in frame.",
+            )
+
+        best_user_id = max(
+            all_templates,
+            key=lambda uid: cosine_similarity(current_embedding, all_templates[uid]),
+        )
+        best_similarity = cosine_similarity(current_embedding, all_templates[best_user_id])
+        authenticated = best_similarity >= self.threshold
+
+        return FaceIdentifyResponse(
+            authenticated=authenticated,
+            user_id=best_user_id,
+            similarity=best_similarity,
+            threshold=self.threshold,
+            message=(
+                f"Identified as {best_user_id}."
+                if authenticated
+                else f"No confident match (closest: {best_user_id}, score: {best_similarity:.3f})."
             ),
         )

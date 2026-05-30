@@ -439,3 +439,196 @@ button:disabled {
   gap: 0.75rem;
   margin-top: 1.5rem;
 }
+/* ─── Register page additions ────────────────────────────────────────────────
+   Append these rules to your existing styles.css.
+   All existing session-* classes (video-wrap, video, countdown, instruction,
+   error, auth-status, actions, buttons) are reused without changes.
+──────────────────────────────────────────────────────────────────────────── */
+
+/* ── Header ────────────────────────────────────────────────────────────────── */
+.register-header {
+  text-align: center;
+  margin-bottom: 1.25rem;
+}
+
+.register-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #ecf0f1;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-bottom: 0.75rem;
+  transition: background 0.15s;
+}
+.register-back-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.register-title {
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: #ecf0f1;
+  margin: 0 0 0.35rem;
+}
+
+.register-subtitle {
+  font-size: 0.88rem;
+  color: rgba(236, 240, 241, 0.6);
+  margin: 0;
+}
+
+/* ── Still frame after capture ─────────────────────────────────────────────── */
+.register-still {
+  object-fit: cover;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+/* ── Processing overlay (spinner over video) ───────────────────────────────── */
+.register-processing-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: inherit;
+  color: #ecf0f1;
+  font-size: 0.95rem;
+  font-weight: 500;
+  pointer-events: none;
+}
+
+.register-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #2ed573;
+  border-radius: 50%;
+  animation: register-spin 0.8s linear infinite;
+}
+
+@keyframes register-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Form ──────────────────────────────────────────────────────────────────── */
+.register-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  width: 100%;
+  max-width: 420px;
+  margin: 1rem auto 0;
+}
+
+.register-label {
+  font-size: 0.82rem;
+  color: rgba(236, 240, 241, 0.7);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.register-input {
+  width: 100%;
+  padding: 0.6rem 0.9rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  color: #ecf0f1;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+  box-sizing: border-box;
+}
+
+.register-input::placeholder {
+  color: rgba(236, 240, 241, 0.35);
+}
+
+.register-input:focus {
+  border-color: #2ed573;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.register-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.session-auth-user {
+  font-weight: 700;
+  color: #2ed573;
+  margin-left: 4px;
+}
+ 
+.session-auth-score {
+  opacity: 0.7;
+  font-size: 0.88em;
+  margin-left: 4px;
+}
+
+.result-auth-block {
+  margin: 0.75rem 0 1.25rem;
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+ 
+.result-auth-verifying {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: rgba(236, 240, 241, 0.7);
+  font-size: 0.95rem;
+}
+ 
+.result-auth-spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255,255,255,0.2);
+  border-top-color: #2ed573;
+  border-radius: 50%;
+  animation: register-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+ 
+.result-auth-success {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(46, 213, 115, 0.12);
+  border: 1px solid rgba(46, 213, 115, 0.35);
+  border-radius: 10px;
+  padding: 0.55rem 1.1rem;
+}
+ 
+.result-auth-icon {
+  font-size: 1.3rem;
+}
+ 
+.result-auth-name {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #2ed573;
+}
+ 
+.result-auth-score {
+  font-size: 0.82rem;
+  color: rgba(236, 240, 241, 0.55);
+}
+ 
+.result-auth-failed {
+  color: #ff6b81;
+  font-size: 0.92rem;
+}

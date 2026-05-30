@@ -1,5 +1,6 @@
 import base64
-
+from dotenv import load_dotenv
+load_dotenv()
 import cv2
 import numpy as np
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -12,6 +13,8 @@ from fas.auth_schemas import (
     FaceEnrollResponse,
     FaceVerifyRequest,
     FaceVerifyResponse,
+    FaceIdentifyRequest,
+    FaceIdentifyResponse,
 )
 from fas.auth_service import FaceAuthService
 
@@ -44,6 +47,9 @@ def infer_frame(payload: LivenessInferRequest) -> LivenessInferResponse:
 def enroll_face(payload: FaceEnrollRequest) -> FaceEnrollResponse:
     return auth_service.enroll(payload)
 
+@app.post("/v1/auth/identify", response_model=FaceIdentifyResponse)
+def identify_face(payload: FaceIdentifyRequest) -> FaceIdentifyResponse:
+    return auth_service.identify(payload)
 
 @app.post("/v1/auth/verify", response_model=FaceVerifyResponse)
 def verify_face(payload: FaceVerifyRequest) -> FaceVerifyResponse:
