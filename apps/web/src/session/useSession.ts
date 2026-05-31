@@ -4,7 +4,7 @@ import { computeVerdict, YAW_CENTER, YAW_TARGET } from './fusion'
 import type { FrameApiResponse, FrameRecord, Phase, TurnDirection, Verdict } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
-const CAPTURE_INTERVAL_MS = 100
+const CAPTURE_INTERVAL_MS = 20
 const COUNTDOWN_MS = 3000  // 3s so backend JIT warmup (TorchScript first-inference) finishes before first frame
 const REQUIRED_CONSECUTIVE_FRAMES = 5
 const CAPTURE_WIDTH = 640
@@ -188,15 +188,6 @@ export function useSession(
       if (!response.ok) throw new Error(`API request failed with status ${response.status}`)
 
       const payload = (await response.json()) as FrameApiResponse
-      const frame: FrameRecord = {
-        ts_ms: Date.now() - sessionStartedAtRef.current,
-        phase: current.phase,
-        face_detected: payload.face_detected,
-        passive_score: payload.liveness_score,
-        yaw_deg: payload.yaw_deg,
-        pose_ok: payload.pose_ok,
-      }
-
       const rawYaw = payload.yaw_deg
       const smoothedYaw =
         rawYaw === null
@@ -206,6 +197,15 @@ export function useSession(
             : 0.5 * smoothedYawRef.current + 0.5 * rawYaw
       smoothedYawRef.current = smoothedYaw
 
+      const frame: FrameRecord = {
+        ts_ms: Date.now() - sessionStartedAtRef.current,
+        phase: current.phase,
+        face_detected: payload.face_detected,
+        passive_score: payload.liveness_score,
+        yaw_deg: smoothedYaw,
+        pose_ok: payload.pose_ok,
+      }
+
       const criterionMet =
         payload.face_detected && payload.pose_ok && phaseCriterionMet(current.phase, smoothedYaw, current.turn_A_dir)
       consecutiveRef.current = criterionMet ? consecutiveRef.current + 1 : 0
@@ -213,7 +213,7 @@ export function useSession(
       setState((latest) => ({
         ...latest,
         frames: [...latest.frames, frame],
-        latest_yaw: payload.yaw_deg,
+        latest_yaw: smoothedYaw,
         latest_passive: payload.liveness_score,
         face_detected: payload.face_detected,
         latest_bbox: payload.face_bbox_xyxy ?? null,
