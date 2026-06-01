@@ -204,7 +204,7 @@ export function useSession(
         return
       }
 
-      activeWorkersRef.current++
+      // Worker already incremented at the call site, don't increment again
 
       try {
         const frameEndpoint = captureDebug
