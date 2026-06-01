@@ -1,10 +1,15 @@
 import { T_PASSIVE, YAW_TARGET } from './fusion'
+import type { SessionState } from './useSession'
 import type { TurnDirection, Verdict } from './types'
 
 interface Props {
   verdict: Verdict
   turn_A_dir: TurnDirection
   onRetry: () => void
+  authStatus: SessionState['auth_status']
+  identifiedUser: string | null
+  similarity: number | null
+  authMessage: string | null
 }
 
 function formatPct(value: number): string {
@@ -34,7 +39,15 @@ function failureReason(verdict: Verdict, turn_A_dir: TurnDirection): string {
   return 'Không vượt qua thử thách chuyển động'
 }
 
-export function ResultView({ verdict, turn_A_dir, onRetry }: Props) {
+export function ResultView({
+  verdict,
+  turn_A_dir,
+  onRetry,
+  authStatus,
+  identifiedUser,
+  similarity,
+  authMessage,
+}: Props) {
   const isLive = verdict.verdict === 'LIVE'
 
   return (
@@ -44,6 +57,32 @@ export function ResultView({ verdict, turn_A_dir, onRetry }: Props) {
         <h1>{isLive ? 'THẬT' : 'GIẢ MẠO'}</h1>
 
         {!isLive ? <p className="failure-reason">{failureReason(verdict, turn_A_dir)}</p> : null}
+
+        {/* ── Auth result block (only shown for LIVE) ── */}
+        {isLive && (
+          <div className="result-auth-block">
+            {authStatus === 'verifying' && (
+              <div className="result-auth-verifying">
+                <span className="result-auth-spinner" />
+                Đang xác thực danh tính…
+              </div>
+            )}
+            {authStatus === 'authenticated' && identifiedUser && (
+              <div className="result-auth-success">
+                <span className="result-auth-icon">👤</span>
+                <span className="result-auth-name">{identifiedUser}</span>
+                {similarity !== null && (
+                  <span className="result-auth-score">({similarity.toFixed(3)})</span>
+                )}
+              </div>
+            )}
+            {authStatus === 'failed' && (
+              <div className="result-auth-failed">
+                ❌ {authMessage ?? 'Không nhận ra người dùng'}
+              </div>
+            )}
+          </div>
+        )}
 
         <dl className="result-stats">
           <div>

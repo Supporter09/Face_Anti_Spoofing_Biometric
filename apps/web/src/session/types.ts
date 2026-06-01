@@ -53,3 +53,11 @@ export interface FrameApiResponse {
   face_landmarks: [number, number][] | null
   message?: string | null
 }
+export interface AuthResponse {
+  authenticated?: boolean
+  success?: boolean
+  user_id: string
+  similarity?: number
+  threshold?: number
+  message: string
+}

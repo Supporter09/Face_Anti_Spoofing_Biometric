@@ -4,7 +4,7 @@ import { DiagnoseView } from './session/DiagnoseView'
 import { ResultView } from './session/ResultView'
 import { SessionView } from './session/SessionView'
 import { useSession } from './session/useSession'
-
+import { RegisterView } from './session/RegisterView'
 type LivenessLabel = 'live' | 'spoof' | 'no_face' | 'uncertain'
 
 type InferResponse = {
@@ -27,7 +27,13 @@ async function startCamera(videoRef: React.RefObject<HTMLVideoElement | null>) {
   const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
   if (!videoRef.current) return
   videoRef.current.srcObject = stream
+
+  console.log("VIDEO ELEMENT:", videoRef.current)
+  console.log("STREAM:", stream)
+
   await videoRef.current.play()
+
+  console.log("VIDEO PLAYING")
 }
 
 /** Send one dummy frame to trigger TorchScript JIT warmup so the first real session isn't slow. */
@@ -212,7 +218,7 @@ function LegacyApp() {
 
       <section className="demo-grid">
         <div className="video-card">
-          <video ref={videoRef} playsInline muted className="video-feed" />
+          <video ref={videoRef} autoPlay playsInline muted className="video-feed" />
           <canvas ref={canvasRef} hidden />
         </div>
         <div className={`result-card ${statusTone}`}>
@@ -241,34 +247,76 @@ function LegacyApp() {
 
 function App() {
   const isLegacy = new URLSearchParams(window.location.search).has('legacy')
-  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const [screen, setScreen] = useState<'session' | 'register'>('session')
+ 
+  const videoRef  = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const { state, start, reset, isDiagnose } = useSession(videoRef, canvasRef)
-
+ 
+  // Camera starts once, stays alive forever — never unmounts
   useEffect(() => {
     if (!isLegacy) {
       void startCamera(videoRef).then(() => prewarmBackend(videoRef, canvasRef))
     }
   }, [isLegacy])
-
+ 
   if (isLegacy) return <LegacyApp />
-
-  // Keep SessionView (and its <video> element) always mounted so the camera stream
-  // is never dropped between sessions. Hiding it with CSS instead of unmounting
-  // prevents the stream from dying when the user clicks "Thử lại".
+ 
   const showResult = state.phase === 'result' && state.verdict != null
-
+ 
   return (
     <>
-      <div style={showResult ? { display: 'none' } : undefined}>
-        <SessionView videoRef={videoRef} state={state} onStart={start} onReset={reset} />
-      </div>
+      {/*
+        THE KEY FIX: one <video> lives here at App level, always mounted.
+        It is positioned absolute/hidden and "claimed" by whichever screen
+        is active via the videoRef. Both screens read from the same stream.
+      */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className="session-video app-level-video"
+        style={{ display: 'none' }}   // hidden — each screen renders its own visible copy via CSS mirror trick below
+      />
       <canvas ref={canvasRef} hidden />
-      {showResult && !isDiagnose && (
-        <ResultView verdict={state.verdict!} turn_A_dir={state.turn_A_dir!} onRetry={reset} />
+ 
+      {/* ── Register screen ─────────────────────────────────────────────── */}
+      {screen === 'register' && (
+        <RegisterView
+          videoRef={videoRef}
+          canvasRef={canvasRef}
+          onBack={() => setScreen('session')}
+        />
       )}
-      {showResult && isDiagnose && (
-        <DiagnoseView frames={state.frames} turn_A_dir={state.turn_A_dir!} onRetry={reset} />
+ 
+      {/* ── Session screen ──────────────────────────────────────────────── */}
+      {screen === 'session' && (
+        <>
+          <div style={showResult ? { display: 'none' } : undefined}>
+            <SessionView
+              videoRef={videoRef}
+              state={state}
+              onStart={start}
+              onReset={reset}
+              onRegister={() => setScreen('register')}
+            />
+          </div>
+            {showResult && !isDiagnose && (
+              <ResultView
+                verdict={state.verdict!}
+                turn_A_dir={state.turn_A_dir!}
+                onRetry={reset}
+                authStatus={state.auth_status}
+                identifiedUser={state.identified_user}
+                similarity={state.similarity}
+                authMessage={state.auth_message}
+              />
+            )}
+          {showResult && isDiagnose && (
+            <DiagnoseView frames={state.frames} turn_A_dir={state.turn_A_dir!} onRetry={reset} />
+          )}
+        </>
       )}
     </>
   )
