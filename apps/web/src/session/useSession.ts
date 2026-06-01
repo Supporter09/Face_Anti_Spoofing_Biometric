@@ -227,7 +227,7 @@ export function useSession(
               : 0.5 * smoothedYawRef.current + 0.5 * rawYaw
         smoothedYawRef.current = smoothedYaw
 
-        // Use current phase from state (not queued.phase) because frames may be processed after phase changed
+        // Use current phase from stateRef (not queued.phase) because frames may be processed after phase changed
         const currentPhase = stateRef.current.phase
 
         const frame: FrameRecord = {
@@ -273,12 +273,13 @@ export function useSession(
         }))
         queued.reject(error)
       } finally {
-        // Continue processing if queue has more items and workers available
+        // First decrement the current worker (it's done)
+        activeWorkersRef.current = Math.max(0, activeWorkersRef.current - 1)
+
+        // Then check if we should start a new worker
         if (queueRef.current.length > 0 && activeWorkersRef.current < NUM_WORKERS) {
           activeWorkersRef.current++
           processNext()
-        } else {
-          activeWorkersRef.current = Math.max(0, activeWorkersRef.current - 1)
         }
       }
     }
