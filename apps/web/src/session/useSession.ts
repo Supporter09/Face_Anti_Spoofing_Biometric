@@ -186,6 +186,107 @@ export function useSession(
     else setPhase('evaluating')
   }, [setPhase])
 
+  const processQueue = useCallback(() => {
+    const processNext = async () => {
+      const queue = queueRef.current
+      const current = stateRef.current
+
+      // Check if we should stop
+      if (!isActivePhase(current.phase) || queue.length === 0) {
+        activeWorkersRef.current = Math.max(0, activeWorkersRef.current - 1)
+        return
+      }
+
+      // Get next frame from queue (FIFO)
+      const queued = queue.shift()
+      if (!queued) {
+        activeWorkersRef.current = Math.max(0, activeWorkersRef.current - 1)
+        return
+      }
+
+      activeWorkersRef.current++
+
+      try {
+        const frameEndpoint = captureDebug
+          ? `/v1/liveness/frame/debug?session_id=${encodeURIComponent(captureSessionId)}`
+          : '/v1/liveness/frame'
+        const response = await fetch(`${API_BASE}${frameEndpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image_base64: queued.imageBase64 }),
+        })
+        if (!response.ok) throw new Error(`API request failed with status ${response.status}`)
+
+        const payload = (await response.json()) as FrameApiResponse
+        const rawYaw = payload.yaw_deg
+        const smoothedYaw =
+          rawYaw === null
+            ? null
+            : smoothedYawRef.current === null
+              ? rawYaw
+              : 0.5 * smoothedYawRef.current + 0.5 * rawYaw
+        smoothedYawRef.current = smoothedYaw
+
+        const frame: FrameRecord = {
+          ts_ms: Date.now() - sessionStartedAtRef.current,
+          phase: queued.phase,
+          face_detected: payload.face_detected,
+          passive_score: payload.liveness_score,
+          yaw_deg: smoothedYaw,
+          pose_ok: payload.pose_ok,
+        }
+
+        // Check phase advancement criteria
+        const criterionMet =
+          payload.face_detected && payload.pose_ok && phaseCriterionMet(queued.phase, smoothedYaw, queued.turn_A_dir)
+
+        setState((latest) => ({
+          ...latest,
+          frames: [...latest.frames, frame],
+          latest_yaw: smoothedYaw,
+          latest_passive: payload.liveness_score,
+          face_detected: payload.face_detected,
+          latest_bbox: payload.face_bbox_xyxy ?? null,
+          latest_landmarks: (payload.face_landmarks as [number, number][] | null) ?? null,
+          error: null,
+        }))
+
+        // Update consecutive counter and check phase advancement
+        const currentState = stateRef.current
+        if (!isDiagnose && criterionMet && isActivePhase(currentState.phase)) {
+          const newConsecutive = (consecutiveRef.current || 0) + 1
+          consecutiveRef.current = newConsecutive
+          if (newConsecutive >= REQUIRED_CONSECUTIVE_FRAMES) {
+            advanceFrom(currentState.phase)
+          }
+        }
+
+        queued.resolve(frame)
+      } catch (caughtError) {
+        const error = caughtError instanceof Error ? caughtError : new Error('Unexpected error')
+        setState((latest) => ({
+          ...latest,
+          error: error.message,
+        }))
+        queued.reject(error)
+      } finally {
+        // Continue processing if queue has more items and workers available
+        if (queueRef.current.length > 0 && activeWorkersRef.current < NUM_WORKERS) {
+          activeWorkersRef.current++
+          processNext()
+        } else {
+          activeWorkersRef.current = Math.max(0, activeWorkersRef.current - 1)
+        }
+      }
+    }
+
+    // Start processing if workers available and queue not empty
+    if (activeWorkersRef.current < NUM_WORKERS && queueRef.current.length > 0) {
+      activeWorkersRef.current++
+      processNext()
+    }
+  }, [captureDebug, captureSessionId, isDiagnose, phaseCriterionMet, advanceFrom])
+
   const captureAndSend = useCallback(async () => {
     const current = stateRef.current
     if (!isActivePhase(current.phase) || !current.turn_A_dir || activeWorkersRef.current >= NUM_WORKERS || queueRef.current.length >= MAX_QUEUE_SIZE) return
