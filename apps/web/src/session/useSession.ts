@@ -3,6 +3,16 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { computeVerdict, YAW_CENTER, YAW_TARGET } from './fusion'
 import type { FrameApiResponse, FrameRecord, Phase, TurnDirection, Verdict } from './types'
 
+interface QueuedFrame {
+  id: number
+  imageBase64: string
+  timestamp: number
+  phase: FrameRecord['phase']
+  turn_A_dir: TurnDirection
+  resolve: (frame: FrameRecord) => void
+  reject: (error: Error) => void
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
 const CAPTURE_INTERVAL_MS = 20
 const COUNTDOWN_MS = 3000  // 3s so backend JIT warmup (TorchScript first-inference) finishes before first frame
@@ -10,6 +20,10 @@ const REQUIRED_CONSECUTIVE_FRAMES = 5
 const CAPTURE_WIDTH = 640
 const CAPTURE_HEIGHT = 480
 const JPEG_QUALITY = 0.85
+
+// Queue configuration
+const NUM_WORKERS = 2
+const MAX_QUEUE_SIZE = 5
 
 const PHASE_TIMEOUT_MS: Record<FrameRecord['phase'], number> = {
   forward: 3000,  // 2s was tight if camera startup adds latency at phase start
@@ -93,7 +107,9 @@ export function useSession(
 
   const [state, setState] = useState<SessionState>(initialState)
   const stateRef = useRef(state)
-  const inFlightRef = useRef(false)
+  const queueRef = useRef<QueuedFrame[]>([])
+  const activeWorkersRef = useRef(0)
+  const frameIdRef = useRef(0)
   const consecutiveRef = useRef(0)
   const phaseStartedAtRef = useRef(0)
   const sessionStartedAtRef = useRef(0)
@@ -115,7 +131,9 @@ export function useSession(
   }, [])
 
   const reset = useCallback(() => {
-    inFlightRef.current = false
+    queueRef.current = []
+    activeWorkersRef.current = 0
+    frameIdRef.current = 0
     consecutiveRef.current = 0
     smoothedYawRef.current = null
     phaseStartedAtRef.current = 0
@@ -170,12 +188,12 @@ export function useSession(
 
   const captureAndSend = useCallback(async () => {
     const current = stateRef.current
-    if (!isActivePhase(current.phase) || !current.turn_A_dir || inFlightRef.current) return
+    if (!isActivePhase(current.phase) || !current.turn_A_dir || activeWorkersRef.current >= NUM_WORKERS || queueRef.current.length >= MAX_QUEUE_SIZE) return
 
     const imageBase64 = captureFrameBase64()
     if (!imageBase64) return
 
-    inFlightRef.current = true
+    activeWorkersRef.current++
     try {
       const frameEndpoint = captureDebug
         ? `/v1/liveness/frame/debug?session_id=${encodeURIComponent(captureSessionId)}`
@@ -231,7 +249,7 @@ export function useSession(
         error: caughtError instanceof Error ? caughtError.message : 'Unexpected error.',
       }))
     } finally {
-      inFlightRef.current = false
+      activeWorkersRef.current--
     }
   }, [advanceFrom, captureDebug, captureFrameBase64, captureSessionId, isDiagnose, phaseCriterionMet])
 
