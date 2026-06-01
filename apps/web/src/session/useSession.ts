@@ -16,7 +16,7 @@ interface QueuedFrame {
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
 const CAPTURE_INTERVAL_MS = 20
 const COUNTDOWN_MS = 3000  // 3s so backend JIT warmup (TorchScript first-inference) finishes before first frame
-const REQUIRED_CONSECUTIVE_FRAMES = 5
+const REQUIRED_CONSECUTIVE_FRAMES = 10
 const CAPTURE_WIDTH = 640
 const CAPTURE_HEIGHT = 480
 const JPEG_QUALITY = 0.85
@@ -191,16 +191,14 @@ export function useSession(
       const queue = queueRef.current
       const current = stateRef.current
 
-      // Check if we should stop
+      // Check if we should stop - let finally block handle worker decrement
       if (!isActivePhase(current.phase) || queue.length === 0) {
-        activeWorkersRef.current = Math.max(0, activeWorkersRef.current - 1)
         return
       }
 
       // Get next frame from queue (FIFO)
       const queued = queue.shift()
       if (!queued) {
-        activeWorkersRef.current = Math.max(0, activeWorkersRef.current - 1)
         return
       }
 
