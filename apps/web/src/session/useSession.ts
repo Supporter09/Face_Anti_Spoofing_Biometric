@@ -287,72 +287,35 @@ export function useSession(
     }
   }, [captureDebug, captureSessionId, isDiagnose, phaseCriterionMet, advanceFrom])
 
-  const captureAndSend = useCallback(async () => {
+  const captureAndSend = useCallback(() => {
     const current = stateRef.current
-    if (!isActivePhase(current.phase) || !current.turn_A_dir || activeWorkersRef.current >= NUM_WORKERS || queueRef.current.length >= MAX_QUEUE_SIZE) return
+    if (!isActivePhase(current.phase) || !current.turn_A_dir) return
+
+    // Check queue capacity - drop frame if queue is full
+    if (queueRef.current.length >= MAX_QUEUE_SIZE) return
 
     const imageBase64 = captureFrameBase64()
     if (!imageBase64) return
 
-    activeWorkersRef.current++
-    try {
-      const frameEndpoint = captureDebug
-        ? `/v1/liveness/frame/debug?session_id=${encodeURIComponent(captureSessionId)}`
-        : '/v1/liveness/frame'
-      const response = await fetch(`${API_BASE}${frameEndpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image_base64: imageBase64 }),
-      })
-      if (!response.ok) throw new Error(`API request failed with status ${response.status}`)
-
-      const payload = (await response.json()) as FrameApiResponse
-      const rawYaw = payload.yaw_deg
-      const smoothedYaw =
-        rawYaw === null
-          ? null
-          : smoothedYawRef.current === null
-            ? rawYaw
-            : 0.5 * smoothedYawRef.current + 0.5 * rawYaw
-      smoothedYawRef.current = smoothedYaw
-
-      const frame: FrameRecord = {
-        ts_ms: Date.now() - sessionStartedAtRef.current,
+    // Create promise-based frame capture and add to queue
+    return new Promise<void>((resolve, reject) => {
+      const queued: QueuedFrame = {
+        id: frameIdRef.current++,
+        imageBase64,
+        timestamp: Date.now(),
         phase: current.phase,
-        face_detected: payload.face_detected,
-        passive_score: payload.liveness_score,
-        yaw_deg: smoothedYaw,
-        pose_ok: payload.pose_ok,
+        turn_A_dir: current.turn_A_dir,
+        resolve: (frame) => {
+          // The original QueuedFrame.resolve expected FrameRecord
+          // We just resolve the promise as void for captureAndSend's return type
+          resolve()
+        },
+        reject,
       }
-
-      const criterionMet =
-        payload.face_detected && payload.pose_ok && phaseCriterionMet(current.phase, smoothedYaw, current.turn_A_dir)
-      consecutiveRef.current = criterionMet ? consecutiveRef.current + 1 : 0
-
-      setState((latest) => ({
-        ...latest,
-        frames: [...latest.frames, frame],
-        latest_yaw: smoothedYaw,
-        latest_passive: payload.liveness_score,
-        face_detected: payload.face_detected,
-        latest_bbox: payload.face_bbox_xyxy ?? null,
-        latest_landmarks: (payload.face_landmarks as [number, number][] | null) ?? null,
-        error: null,
-      }))
-
-      // In diagnose mode every phase runs to timeout so all phases are always captured.
-      if (!isDiagnose && consecutiveRef.current >= REQUIRED_CONSECUTIVE_FRAMES) {
-        advanceFrom(current.phase)
-      }
-    } catch (caughtError) {
-      setState((latest) => ({
-        ...latest,
-        error: caughtError instanceof Error ? caughtError.message : 'Unexpected error.',
-      }))
-    } finally {
-      activeWorkersRef.current--
-    }
-  }, [advanceFrom, captureDebug, captureFrameBase64, captureSessionId, isDiagnose, phaseCriterionMet])
+      queueRef.current.push(queued)
+      processQueue()
+    })
+  }, [captureFrameBase64, processQueue])
 
   useEffect(() => {
     if (state.phase !== 'countdown') return
