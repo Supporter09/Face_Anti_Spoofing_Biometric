@@ -68,22 +68,18 @@ export function ResultView({ verdict, turn_A_dir, onRetry }: Props) {
             <dt>Duration</dt>
             <dd>{(verdict.duration_ms / 1000).toFixed(1)}s</dd>
           </div>
-          {!isLive ? (
-            <>
-              <div>
-                <dt>Quay trái (rel.)</dt>
-                <dd>
-                  {verdict.challenge_eval.max_yaw_left?.toFixed(1) ?? '—'}° / -{YAW_TARGET}°
-                </dd>
-              </div>
-              <div>
-                <dt>Quay phải (rel.)</dt>
-                <dd>
-                  {verdict.challenge_eval.max_yaw_right?.toFixed(1) ?? '—'}° / +{YAW_TARGET}°
-                </dd>
-              </div>
-            </>
-          ) : null}
+          <div>
+            <dt>Quay trái (rel.)</dt>
+            <dd>
+              {verdict.challenge_eval.max_yaw_left?.toFixed(1) ?? '—'}° / -{YAW_TARGET}°
+            </dd>
+          </div>
+          <div>
+            <dt>Quay phải (rel.)</dt>
+            <dd>
+              {verdict.challenge_eval.max_yaw_right?.toFixed(1) ?? '—'}° / +{YAW_TARGET}°
+            </dd>
+          </div>
         </dl>
 
         <button className={isLive ? 'secondary-button' : 'danger-button'} onClick={onRetry}>
