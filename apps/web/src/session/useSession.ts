@@ -14,7 +14,7 @@ interface QueuedFrame {
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
-const CAPTURE_INTERVAL_MS = 50
+const CAPTURE_INTERVAL_MS = 20
 const COUNTDOWN_MS = 3000  // 3s so backend JIT warmup (TorchScript first-inference) finishes before first frame
 const REQUIRED_CONSECUTIVE_FRAMES = 10
 const CAPTURE_WIDTH = 640
