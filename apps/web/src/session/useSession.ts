@@ -227,18 +227,21 @@ export function useSession(
               : 0.5 * smoothedYawRef.current + 0.5 * rawYaw
         smoothedYawRef.current = smoothedYaw
 
+        // Use current phase from state (not queued.phase) because frames may be processed after phase changed
+        const currentPhase = stateRef.current.phase
+
         const frame: FrameRecord = {
           ts_ms: Date.now() - sessionStartedAtRef.current,
-          phase: queued.phase,
+          phase: currentPhase,
           face_detected: payload.face_detected,
           passive_score: payload.liveness_score,
           yaw_deg: smoothedYaw,
           pose_ok: payload.pose_ok,
         }
 
-        // Check phase advancement criteria
+        // Check phase advancement criteria using current phase
         const criterionMet =
-          payload.face_detected && payload.pose_ok && phaseCriterionMet(queued.phase, smoothedYaw, queued.turn_A_dir)
+          payload.face_detected && payload.pose_ok && phaseCriterionMet(currentPhase, smoothedYaw, queued.turn_A_dir)
 
         setState((latest) => ({
           ...latest,
