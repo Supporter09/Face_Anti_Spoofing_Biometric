@@ -11,7 +11,7 @@ export const MAX_YAW_JUMP = 15 // degrees; consecutive jump > this = suspect fra
 // solvePnP with approximate focal length gives a constant offset (typically 10-20°),
 // so absolute thresholds are unreliable. Using relative yaw makes the challenge
 // robust to camera position, FOV, and solvePnP calibration offset.
-export const YAW_TARGET = 10 // minimum relative yaw for turn phases (lowered from 12 for real-world robustness)
+export const YAW_TARGET = 20 // minimum relative yaw for turn phases (increased for better liveness challenge)
 export const YAW_CENTER = 10 // maximum |relative yaw| for forward/center phases (loosened from 8)
 
 export function evaluateChallenge(
