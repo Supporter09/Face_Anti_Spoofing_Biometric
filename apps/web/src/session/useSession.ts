@@ -14,7 +14,7 @@ interface QueuedFrame {
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
-const CAPTURE_INTERVAL_MS = 20
+const CAPTURE_INTERVAL_MS = 50
 const COUNTDOWN_MS = 3000  // 3s so backend JIT warmup (TorchScript first-inference) finishes before first frame
 const REQUIRED_CONSECUTIVE_FRAMES = 10
 const CAPTURE_WIDTH = 640
@@ -22,8 +22,8 @@ const CAPTURE_HEIGHT = 480
 const JPEG_QUALITY = 0.85
 
 // Queue configuration
-const NUM_WORKERS = 2
-const MAX_QUEUE_SIZE = 5
+const NUM_WORKERS = 3
+const MAX_QUEUE_SIZE = 3
 
 const PHASE_TIMEOUT_MS: Record<FrameRecord['phase'], number> = {
   forward: 3000,  // 2s was tight if camera startup adds latency at phase start
