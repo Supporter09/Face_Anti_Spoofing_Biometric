@@ -17,6 +17,7 @@ export interface FrameRecord {
   passive_score: number
   yaw_deg: number | null
   pose_ok: boolean
+  image_base64?: string
 }
 
 export interface ChallengeEval {
