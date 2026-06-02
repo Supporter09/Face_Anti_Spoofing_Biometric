@@ -104,11 +104,13 @@ export function useRegister(
 
   // ── Start: validate → begin countdown ────────────────────────────────────
   const start = useCallback(() => {
+    console.log('[Register] Start button clicked!')
     const { userId } = stateRef.current
     if (!userId.trim()) {
       setState((s) => ({ ...s, error: 'Vui lòng nhập tên người dùng' }))
       return
     }
+    console.log('[Register] Setting phase to countdown, userId:', userId)
     setState((s) => ({
       ...s,
       phase: 'countdown',
@@ -120,7 +122,11 @@ export function useRegister(
 
   // ── Continuous frame capture with yaw check ──────────────────────────────────────
   useEffect(() => {
-    if (state.phase !== 'countdown') return
+    console.log('[Register] useEffect triggered, phase:', state.phase)
+    if (state.phase !== 'countdown') {
+      console.log('[Register] Skipping - phase is not countdown')
+      return
+    }
 
     const startedAt = Date.now()
     const timerRef = { current: null as number | null }
