@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { YAW_CENTER } from './fusion'
+import type { FrameApiResponse } from './types'
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
+const CAPTURE_INTERVAL_MS = 20
+const REGISTER_TIMEOUT_MS = 4000
 
 const CAPTURE_WIDTH = 640
 const CAPTURE_HEIGHT = 480
@@ -23,6 +28,9 @@ export interface RegisterState {
   error: string | null
   /** base64 preview of the captured frame — shown as a still after capture */
   capturedFrame: string | null
+  // NEW:
+  latest_yaw: number | null
+  face_detected: boolean
 }
 
 function initialState(): RegisterState {
@@ -32,6 +40,8 @@ function initialState(): RegisterState {
     userId: '',
     error: null,
     capturedFrame: null,
+    latest_yaw: null,
+    face_detected: false,
   }
 }
 
@@ -108,47 +118,76 @@ export function useRegister(
     }))
   }, [])
 
-  // ── Countdown tick → capture ──────────────────────────────────────────────
+  // ── Continuous frame capture with yaw check ──────────────────────────────────────
   useEffect(() => {
     if (state.phase !== 'countdown') return
 
-    const id = window.setInterval(() => {
-      setState((s) => {
-        if (s.phase !== 'countdown') return s
-        const next = s.countdown - 1
-        if (next <= 0) {
-          // Capture happens outside setState; signal via a sentinel
-          return { ...s, countdown: 0 }
-        }
-        return { ...s, countdown: next }
+    const startedAt = Date.now()
+    const timerRef = { current: null as number | null }
+
+    const tick = () => {
+      const elapsed = Date.now() - startedAt
+      if (elapsed >= REGISTER_TIMEOUT_MS) {
+        if (timerRef.current) clearInterval(timerRef.current)
+        setState((s) => ({
+          ...s,
+          phase: 'error',
+          error: 'Không tìm thấy khuôn mặt nhìn thẳng',
+        }))
+        return
+      }
+
+      const imageBase64 = captureFrameBase64()
+      if (!imageBase64) return
+
+      fetch(`${API_BASE}/v1/liveness/frame`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_base64: imageBase64 }),
       })
-    }, 1000)
+        .then((res) => res.json())
+        .then((payload: FrameApiResponse) => {
+          const yaw = payload.yaw_deg
+          const faceDetected = payload.face_detected
+
+          setState((s) => ({
+            ...s,
+            latest_yaw: yaw,
+            face_detected: faceDetected,
+          }))
+
+          if (faceDetected && yaw !== null && Math.abs(yaw) <= YAW_CENTER) {
+            if (timerRef.current) clearInterval(timerRef.current)
+            setState((s) => ({
+              ...s,
+              capturedFrame: `data:image/jpeg;base64,${imageBase64}`,
+            }))
+            void enroll(imageBase64, stateRef.current.userId)
+          }
+        })
+        .catch(() => {})
+    }
+
+    timerRef.current = window.setInterval(tick, CAPTURE_INTERVAL_MS)
+
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
+  }, [captureFrameBase64, enroll])
+
+  // ── Countdown timer display (separate from capture logic) ──────────────────────────
+  useEffect(() => {
+    if (state.phase !== 'countdown') return
+
+    const startedAt = Date.now()
+    const id = window.setInterval(() => {
+      const elapsed = Date.now() - startedAt
+      const next = Math.max(0, 3 - Math.floor(elapsed / 1000))
+      setState((s) => ({ ...s, countdown: next }))
+    }, 100)
 
     return () => window.clearInterval(id)
   }, [state.phase])
-
-  // ── When countdown hits 0 → grab frame + enroll ──────────────────────────
-  useEffect(() => {
-    if (state.phase !== 'countdown' || state.countdown !== 0) return
-
-    const imageBase64 = captureFrameBase64()
-    if (!imageBase64) {
-      setState((s) => ({
-        ...s,
-        phase: 'error',
-        error: 'Không thể chụp ảnh từ webcam',
-      }))
-      return
-    }
-
-    // Store preview frame (add back the data-url prefix for <img> src)
-    setState((s) => ({
-      ...s,
-      capturedFrame: `data:image/jpeg;base64,${imageBase64}`,
-    }))
-
-    void enroll(imageBase64, stateRef.current.userId)
-  }, [state.phase, state.countdown, captureFrameBase64, enroll])
 
   return { state, setUserId, start, reset }
 }
