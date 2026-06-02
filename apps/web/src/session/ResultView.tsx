@@ -72,7 +72,7 @@ export function ResultView({
                 <span className="result-auth-icon">👤</span>
                 <span className="result-auth-name">{identifiedUser}</span>
                 {similarity !== null && (
-                  <span className="result-auth-score">({similarity.toFixed(3)})</span>
+                  <span className="result-auth-score">(Độ tương tự: {(similarity * 100).toFixed(1)}%)</span>
                 )}
               </div>
             )}
