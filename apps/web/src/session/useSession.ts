@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { computeVerdict, YAW_CENTER, YAW_TARGET } from './fusion'
+import { computeVerdict, selectBestFramesForAuth, YAW_CENTER, YAW_TARGET } from './fusion'
 import type { FrameApiResponse, FrameRecord, Phase, TurnDirection, Verdict } from './types'
 
 interface QueuedFrame {
@@ -299,36 +299,54 @@ export function useSession(
   }, [captureDebug, captureSessionId, isDiagnose, phaseCriterionMet, advanceFrom])
 
   const authenticate = useCallback(async () => {
-    const imageBase64 = captureFrameBase64()
-    if (!imageBase64) return
-  
+    const { frames, turn_A_dir } = stateRef.current
+    if (!turn_A_dir || frames.length === 0) return
+
     setState((s) => ({
       ...s,
       auth_status: 'verifying',
       auth_message: 'Đang xác thực...',
       identified_user: null,
     }))
-  
+
     try {
-      const response = await fetch(`${API_BASE}/v1/auth/identify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image_base64: imageBase64 }),
-      })
-  
-      if (!response.ok) {
-        throw new Error(`Auth API failed: ${response.status}`)
+      // Calculate yaw baseline from forward phase frames
+      const forwardFrames = frames.filter((f) => f.phase === 'forward' && f.yaw_deg !== null)
+      const yawBaseline = forwardFrames.length > 0
+        ? forwardFrames.reduce((a, b) => a + b.yaw_deg!, 0) / forwardFrames.length
+        : 0
+
+      // Select top 3 best frames for auth
+      const bestFrames = selectBestFramesForAuth(frames, yawBaseline, 3)
+
+      if (bestFrames.length === 0) {
+        throw new Error('Không đủ khung hình tốt để xác thực')
       }
-  
-      const payload = await response.json()
-      // payload: { authenticated, user_id, similarity, threshold, message }
-  
+
+      // Run auth requests in parallel
+      const authPromises = bestFrames.map((frame) =>
+        fetch(`${API_BASE}/v1/auth/identify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image_base64: frame.image_base64 }),
+        }).then((res) => res.json())
+      )
+
+      const results = await Promise.all(authPromises)
+
+      // Average the similarities
+      const similarities = results.map((r) => r.similarity ?? 0)
+      const avgSimilarity = similarities.reduce((a, b) => a + b, 0) / similarities.length
+
+      // Use the identify result from the best frame for user_id
+      const bestResult = results[0]
+
       setState((s) => ({
         ...s,
-        auth_status: payload.authenticated ? 'authenticated' : 'failed',
-        auth_message: payload.message,
-        similarity: payload.similarity ?? null,
-        identified_user: payload.authenticated ? payload.user_id : null,
+        auth_status: bestResult.authenticated ? 'authenticated' : 'failed',
+        auth_message: bestResult.message,
+        similarity: avgSimilarity,
+        identified_user: bestResult.authenticated ? bestResult.user_id : null,
       }))
     } catch (err) {
       setState((s) => ({
@@ -338,7 +356,7 @@ export function useSession(
         identified_user: null,
       }))
     }
-  }, [captureFrameBase64])
+  }, [])
 
   const captureAndSend = useCallback(() => {
     const current = stateRef.current
