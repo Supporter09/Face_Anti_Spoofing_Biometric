@@ -204,7 +204,7 @@ export function useRegister(
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
-  }, [captureFrameBase64, enroll])
+  }, [captureFrameBase64, enroll, state.phase])
 
   // ── Countdown timer display (separate from capture logic) ──────────────────────────
   useEffect(() => {
