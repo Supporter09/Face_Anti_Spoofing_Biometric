@@ -136,3 +136,30 @@ export function computeVerdict(
   if (!passivePass) return { ...base, verdict: 'SPOOF', reason: 'passive_low' }
   return { ...base, verdict: 'LIVE' }
 }
+
+/**
+ * Select the best N frames for authentication.
+ * Filters for: face_detected, centered (abs(relative_yaw) <= YAW_CENTER), high passive score.
+ * Returns top N frames sorted by passive_score descending.
+ */
+export function selectBestFramesForAuth(
+  frames: FrameRecord[],
+  yawBaseline: number,
+  count: number = 3
+): FrameRecord[] {
+  const rel = (yaw: number | null) => yaw === null ? null : yaw - yawBaseline
+
+  const goodFrames = frames.filter((f) => {
+    if (!f.face_detected || !f.image_base64) return false
+    if (f.passive_score < T_PASSIVE) return false
+    const relativeYaw = rel(f.yaw_deg)
+    if (relativeYaw === null) return false
+    return Math.abs(relativeYaw) <= YAW_CENTER
+  })
+
+  // Sort by passive_score descending
+  goodFrames.sort((a, b) => b.passive_score - a.passive_score)
+
+  return goodFrames.slice(0, count)
+}
+
