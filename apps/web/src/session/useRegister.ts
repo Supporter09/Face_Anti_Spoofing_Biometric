@@ -124,10 +124,29 @@ export function useRegister(
 
     const startedAt = Date.now()
     const timerRef = { current: null as number | null }
+    let hasEnrolled = false
 
     const tick = () => {
       const elapsed = Date.now() - startedAt
       const currentUserId = stateRef.current.userId
+      const currentCountdown = stateRef.current.countdown
+
+      // If countdown completed (reached 0), enroll with current frame regardless of yaw
+      if (currentCountdown === 0 && !hasEnrolled) {
+        hasEnrolled = true
+        if (timerRef.current) clearInterval(timerRef.current)
+        const imageBase64 = captureFrameBase64()
+        if (imageBase64) {
+          setState((s) => ({
+            ...s,
+            capturedFrame: `data:image/jpeg;base64,${imageBase64}`,
+          }))
+          void enroll(imageBase64, currentUserId)
+        }
+        return
+      }
+
+      // Timeout check
       if (elapsed >= REGISTER_TIMEOUT_MS) {
         if (timerRef.current) clearInterval(timerRef.current)
         setState((s) => ({
@@ -157,7 +176,9 @@ export function useRegister(
             face_detected: faceDetected,
           }))
 
-          if (faceDetected && yaw !== null && Math.abs(yaw) <= YAW_CENTER) {
+          // If centered face found, enroll immediately
+          if (!hasEnrolled && faceDetected && yaw !== null && Math.abs(yaw) <= YAW_CENTER) {
+            hasEnrolled = true
             if (timerRef.current) clearInterval(timerRef.current)
             setState((s) => ({
               ...s,
