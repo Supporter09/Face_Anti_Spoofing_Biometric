@@ -88,6 +88,12 @@ export function RegisterView({ videoRef, canvasRef, onBack }: Props) {
           {state.phase === 'countdown' && (
             <div className="session-instruction">Nhìn thẳng vào camera…</div>
           )}
+          {state.phase === 'countdown' && state.latest_yaw !== null && (
+            <div className="session-yaw-indicator">
+              Góc quay: {state.latest_yaw.toFixed(1)}° (
+            {Math.abs(state.latest_yaw) <= 10 ? '✓ Đã căn giữa' : '↔ Cần căn giữa'})
+            </div>
+          )}
           {isLoading && (
             <div className="register-processing-overlay">
               <div className="register-spinner" />
