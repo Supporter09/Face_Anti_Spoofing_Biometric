@@ -127,6 +127,7 @@ export function useRegister(
 
     const tick = () => {
       const elapsed = Date.now() - startedAt
+      const currentUserId = stateRef.current.userId
       if (elapsed >= REGISTER_TIMEOUT_MS) {
         if (timerRef.current) clearInterval(timerRef.current)
         setState((s) => ({
@@ -162,10 +163,12 @@ export function useRegister(
               ...s,
               capturedFrame: `data:image/jpeg;base64,${imageBase64}`,
             }))
-            void enroll(imageBase64, stateRef.current.userId)
+            void enroll(imageBase64, currentUserId)
           }
         })
-        .catch(() => {})
+        .catch((err) => {
+          console.warn('Frame capture error:', err)
+        })
     }
 
     timerRef.current = window.setInterval(tick, CAPTURE_INTERVAL_MS)
