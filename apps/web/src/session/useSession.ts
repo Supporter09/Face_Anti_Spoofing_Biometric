@@ -243,6 +243,7 @@ export function useSession(
           passive_score: payload.liveness_score,
           yaw_deg: smoothedYaw,
           pose_ok: payload.pose_ok,
+          image_base64: queued.imageBase64,
         }
 
         // Check phase advancement criteria using current phase
