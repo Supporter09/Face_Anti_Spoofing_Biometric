@@ -24,6 +24,7 @@ const JPEG_QUALITY = 0.85
 // Queue configuration
 const NUM_WORKERS = 3
 const MAX_QUEUE_SIZE = 3
+const AUTH_FRAME_COUNT = 3  // Number of frames to average for authentication
 
 const PHASE_TIMEOUT_MS: Record<FrameRecord['phase'], number> = {
   forward: 3000,  // 2s was tight if camera startup adds latency at phase start
@@ -316,8 +317,8 @@ export function useSession(
         ? forwardFrames.reduce((a, b) => a + b.yaw_deg!, 0) / forwardFrames.length
         : 0
 
-      // Select top 3 best frames for auth
-      const bestFrames = selectBestFramesForAuth(frames, yawBaseline, 3)
+      // Select top best frames for auth
+      const bestFrames = selectBestFramesForAuth(frames, yawBaseline, AUTH_FRAME_COUNT)
 
       if (bestFrames.length === 0) {
         throw new Error('Không đủ khung hình tốt để xác thực')
@@ -333,6 +334,11 @@ export function useSession(
       )
 
       const results = await Promise.all(authPromises)
+
+      // Validate results
+      if (!results.length || !results[0]) {
+        throw new Error('Không nhận được phản hồi từ server')
+      }
 
       // Average the similarities
       const similarities = results.map((r) => r.similarity ?? 0)
