@@ -57,6 +57,7 @@ export function useRegister(
 ) {
   const [state, setState] = useState<RegisterState>(initialState)
   const stateRef = useRef(state)
+  const lastCapturedRef = useRef<number>(0)  // Timestamp of last captured frame
   useEffect(() => { stateRef.current = state }, [state])
 
   // ── Form field handler ────────────────────────────────────────────────────
