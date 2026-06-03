@@ -95,7 +95,14 @@ export function RegisterView({ videoRef, canvasRef, onBack }: Props) {
             </div>
           )}
           {(state.phase === 'countdown' || state.phase === 'capturing') && state.captured_frames.length > 0 && (
-            <div className="session-yaw-indicator">
+            <div
+              className="session-frame-progress"
+              role="progressbar"
+              aria-valuenow={state.captured_frames.length}
+              aria-valuemin={0}
+              aria-valuemax={5}
+              aria-label="Tiến trình thu thập khung hình"
+            >
               Đang thu thập: {state.captured_frames.length}/5 khung hình
             </div>
           )}

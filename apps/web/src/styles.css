@@ -192,6 +192,18 @@ button:disabled {
   font-weight: 600;
 }
 
+.session-frame-progress {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  padding: 0.4rem 0.8rem;
+  background: rgba(5, 10, 16, 0.74);
+  border-radius: 6px;
+  color: #fff8f0;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
 .session-countdown {
   position: absolute;
   inset: 0;
