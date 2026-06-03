@@ -5,7 +5,7 @@ import type { FrameApiResponse } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
 const CAPTURE_INTERVAL_MS = 20
-const REGISTER_TIMEOUT_MS = 7000  // 3s countdown + 4s yaw check window
+const REGISTER_TIMEOUT_MS = 7000  // 3s countdown + 4s capture window
 const REGISTRATION_FRAME_COUNT = 5
 const REGISTRATION_CAPTURE_TIMEOUT_MS = 4000
 
@@ -266,7 +266,7 @@ export function useRegister(
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
-  }, [captureFrameBase64, enroll, enrollWithFrames, state.phase])
+  }, [captureFrameBase64, enrollWithFrames, state.phase])
 
   // ── Countdown timer display (separate from capture logic) ──────────────────────────
   useEffect(() => {
