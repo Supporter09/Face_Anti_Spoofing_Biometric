@@ -186,7 +186,7 @@ export function SessionView({ videoRef, state, onStart, onReset, onRegister }: P
                   <span className="session-auth-user"> — {state.identified_user}</span>
                 ) : null}
                 {state.similarity !== null ? (
-                  <span className="session-auth-score"> ({state.similarity.toFixed(3)})</span>
+                  <span className="session-auth-score"> ({(state.similarity * 100).toFixed(1)}%)</span>
                 ) : null}
               </>
             )}
