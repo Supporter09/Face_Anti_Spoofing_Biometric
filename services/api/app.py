@@ -29,6 +29,35 @@ app.add_middleware(
 service = LivenessService()
 auth_service = FaceAuthService()
 
+
+@app.on_event('startup')
+async def startup_event() -> None:
+    """Pre-load all ML models on startup so first request is fast."""
+    # Warm up InsightFace detector (lazy-loaded on first call)
+    print('[Startup] Loading InsightFace detector...')
+    service.detector._ensure_initialized()
+    print('[Startup] InsightFace detector loaded')
+
+    # Warm up liveness model (eager-loaded, but JIT compiles on first inference)
+    print('[Startup] Warming up liveness model...')
+    dummy_image = np.zeros((80, 80, 3), dtype=np.uint8)
+    try:
+        service.liveness_model.predict_live_score(dummy_image)
+        print('[Startup] Liveness model warmed up')
+    except Exception as e:
+        print(f'[Startup] Liveness model warmup warning: {e}')
+
+    # Warm up recognition model
+    print('[Startup] Loading recognition model...')
+    try:
+        auth_service.recognition_model.get_embedding(dummy_image)
+        print('[Startup] Recognition model warmed up')
+    except Exception as e:
+        print(f'[Startup] Recognition model warmup warning: {e}')
+
+    print('[Startup] All models ready')
+
+
 @app.get('/health')
 def health() -> dict[str, str]:
     return {'status': 'ok'}
