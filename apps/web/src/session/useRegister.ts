@@ -5,7 +5,8 @@ import type { FrameApiResponse } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
 const CAPTURE_INTERVAL_MS = 20
-const REGISTER_TIMEOUT_MS = 4000
+const COUNTDOWN_DURATION_MS = 3000  // 3 seconds for user to prepare
+const REGISTER_TIMEOUT_MS = 7000  // 3s countdown + 4s yaw check window
 
 const CAPTURE_WIDTH = 640
 const CAPTURE_HEIGHT = 480
