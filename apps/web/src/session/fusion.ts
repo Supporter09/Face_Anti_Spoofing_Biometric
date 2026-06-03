@@ -169,10 +169,19 @@ export function selectBestFramesForAuth(
  * @returns Mean embedding as flat array
  */
 export function meanEmbeddings(embeddings: number[][]): number[] {
-  if (embeddings.length === 0) return []
+  if (!embeddings || embeddings.length === 0) return []
   if (embeddings.length === 1) return embeddings[0]
 
   const dim = embeddings[0].length
+  if (dim === 0) return []
+
+  // Validate all embeddings have same dimension
+  for (const emb of embeddings) {
+    if (!emb || emb.length !== dim) {
+      throw new Error(`Embedding dimension mismatch: expected ${dim}, got ${emb?.length ?? 'undefined'}`)
+    }
+  }
+
   const result = new Array(dim).fill(0)
 
   for (const emb of embeddings) {
