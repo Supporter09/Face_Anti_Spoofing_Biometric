@@ -5,7 +5,6 @@ import type { FrameApiResponse } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
 const CAPTURE_INTERVAL_MS = 20
-const COUNTDOWN_DURATION_MS = 3000  // 3 seconds for user to prepare
 const REGISTER_TIMEOUT_MS = 7000  // 3s countdown + 4s yaw check window
 
 const CAPTURE_WIDTH = 640
@@ -137,7 +136,7 @@ export function useRegister(
       const elapsed = Date.now() - startedAt
       const currentUserId = stateRef.current.userId
       // Calculate countdown from elapsed time (same as countdown effect)
-      const countdownFromElapsed = Math.max(0, 3 - Math.floor(elapsed / 1000))
+      const countdownFromElapsed = Math.max(0, COUNTDOWN_SEC - Math.floor(elapsed / 1000))
 
       // If countdown completed (reached 0), enroll with current frame regardless of yaw
       if (countdownFromElapsed === 0 && !hasEnrolled) {
@@ -214,7 +213,7 @@ export function useRegister(
     const startedAt = Date.now()
     const id = window.setInterval(() => {
       const elapsed = Date.now() - startedAt
-      const next = Math.max(0, 3 - Math.floor(elapsed / 1000))
+      const next = Math.max(0, COUNTDOWN_SEC - Math.floor(elapsed / 1000))
       setState((s) => ({ ...s, countdown: next }))
     }, 100)
 
