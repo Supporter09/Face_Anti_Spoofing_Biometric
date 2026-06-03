@@ -24,7 +24,6 @@ data/processed/
 # Added by code-review-graph
 .code-review-graph/
 .mcp.json
-CLAUDE.md
 data/stream_store
 data/state_store.db
 .claude/
