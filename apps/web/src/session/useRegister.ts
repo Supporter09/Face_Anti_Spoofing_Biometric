@@ -194,14 +194,15 @@ export function useRegister(
 
       // Timeout check
       if (elapsed >= REGISTRATION_CAPTURE_TIMEOUT_MS) {
-        // If we have enough frames, enroll; otherwise error
+        // If we have at least 1 frame, enroll with whatever available (fallback behavior)
         const frames = stateRef.current.captured_frames
-        if (frames.length >= REGISTRATION_FRAME_COUNT) {
+        if (frames.length >= 1) {
           hasEnrolled = true
           if (timerRef.current) clearInterval(timerRef.current)
           void enrollWithFrames(frames)
           return
         }
+        // No frames captured at all - error
         if (timerRef.current) clearInterval(timerRef.current)
         setState((s) => ({
           ...s,
