@@ -166,8 +166,11 @@ export function useRegister(
             face_detected: faceDetected,
           }))
 
-          // If centered face found, enroll immediately
-          if (!hasEnrolled && faceDetected && yaw !== null && Math.abs(yaw) <= YAW_CENTER) {
+          // Countdown must complete before enrollment allowed
+          const countdownComplete = elapsed >= 3000
+
+          // Only enroll if countdown complete AND centered face found
+          if (!hasEnrolled && countdownComplete && faceDetected && yaw !== null && Math.abs(yaw) <= YAW_CENTER) {
             hasEnrolled = true
             if (timerRef.current) clearInterval(timerRef.current)
             setState((s) => ({
