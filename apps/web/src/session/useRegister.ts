@@ -8,6 +8,7 @@ const CAPTURE_INTERVAL_MS = 20
 const REGISTER_TIMEOUT_MS = 7000  // 3s countdown + 4s capture window
 const REGISTRATION_FRAME_COUNT = 5
 const REGISTRATION_CAPTURE_TIMEOUT_MS = 4000
+const MIN_FRAME_GAP_MS = 100  // Minimum gap between captured frames (ms)
 
 const CAPTURE_WIDTH = 640
 const CAPTURE_HEIGHT = 480
