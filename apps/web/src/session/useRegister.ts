@@ -6,6 +6,8 @@ import type { FrameApiResponse } from './types'
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
 const CAPTURE_INTERVAL_MS = 20
 const REGISTER_TIMEOUT_MS = 7000  // 3s countdown + 4s yaw check window
+const REGISTRATION_FRAME_COUNT = 5
+const REGISTRATION_CAPTURE_TIMEOUT_MS = 4000
 
 const CAPTURE_WIDTH = 640
 const CAPTURE_HEIGHT = 480
@@ -31,6 +33,8 @@ export interface RegisterState {
   // NEW:
   latest_yaw: number | null
   face_detected: boolean
+  /** base64 images collected during multi-frame registration */
+  captured_frames: string[]
 }
 
 function initialState(): RegisterState {
@@ -42,6 +46,7 @@ function initialState(): RegisterState {
     capturedFrame: null,
     latest_yaw: null,
     face_detected: false,
+    captured_frames: [],
   }
 }
 
@@ -102,6 +107,56 @@ export function useRegister(
     }
   }, [])
 
+  // ── Enroll with multiple frames ───────────────────────────────────────────
+  const enrollWithFrames = useCallback(async (frames: string[]) => {
+    setState((s) => ({ ...s, phase: 'capturing' }))
+
+    try {
+      // Extract embeddings in parallel
+      const embedPromises = frames.map(frame =>
+        fetch(`${API_BASE}/v1/auth/embed`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image_base64: frame }),
+        }).then(res => res.json())
+      )
+
+      const results = await Promise.all(embedPromises)
+      const embeddings = results.map(r => r.embedding).filter(Boolean)
+
+      if (embeddings.length === 0) {
+        throw new Error('Không thể trích xuất đặc trưng khuôn mặt')
+      }
+
+      // Average embeddings
+      const { meanEmbeddings } = await import('./fusion')
+      const avgEmbedding = meanEmbeddings(embeddings)
+
+      // Enroll with pre-computed embedding
+      const response = await fetch(`${API_BASE}/v1/auth/enroll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: stateRef.current.userId,
+          embedding: avgEmbedding,
+        }),
+      })
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}))
+        throw new Error(body?.detail ?? `Server error ${response.status}`)
+      }
+
+      setState((s) => ({ ...s, phase: 'success' }))
+    } catch (err) {
+      setState((s) => ({
+        ...s,
+        phase: 'error',
+        error: err instanceof Error ? err.message : 'Registration failed',
+      }))
+    }
+  }, [])
+
   // ── Start: validate → begin countdown ────────────────────────────────────
   const start = useCallback(() => {
     console.log('[Register] Start button clicked!')
@@ -117,6 +172,7 @@ export function useRegister(
       countdown: COUNTDOWN_SEC,
       error: null,
       capturedFrame: null,
+      captured_frames: [],
     }))
   }, [])
 
@@ -137,7 +193,15 @@ export function useRegister(
       const currentUserId = stateRef.current.userId
 
       // Timeout check
-      if (elapsed >= REGISTER_TIMEOUT_MS) {
+      if (elapsed >= REGISTRATION_CAPTURE_TIMEOUT_MS) {
+        // If we have enough frames, enroll; otherwise error
+        const frames = stateRef.current.captured_frames
+        if (frames.length >= REGISTRATION_FRAME_COUNT) {
+          hasEnrolled = true
+          if (timerRef.current) clearInterval(timerRef.current)
+          void enrollWithFrames(frames)
+          return
+        }
         if (timerRef.current) clearInterval(timerRef.current)
         setState((s) => ({
           ...s,
@@ -166,18 +230,30 @@ export function useRegister(
             face_detected: faceDetected,
           }))
 
-          // Countdown must complete before enrollment allowed
+          // Countdown must complete before capturing frames
           const countdownComplete = elapsed >= COUNTDOWN_SEC * 1000
 
-          // Only enroll if countdown complete AND centered face found
-          if (!hasEnrolled && countdownComplete && faceDetected && yaw !== null && Math.abs(yaw) <= YAW_CENTER) {
-            hasEnrolled = true
-            if (timerRef.current) clearInterval(timerRef.current)
+          // Check if centered face and collect frames
+          const isCentered = faceDetected && yaw !== null && Math.abs(yaw) <= YAW_CENTER
+          const currentFrames = stateRef.current.captured_frames
+
+          if (!hasEnrolled && countdownComplete && isCentered && !currentFrames.includes(imageBase64)) {
+            const newFrames = [...currentFrames, imageBase64]
             setState((s) => ({
               ...s,
-              capturedFrame: `data:image/jpeg;base64,${imageBase64}`,
+              captured_frames: newFrames,
             }))
-            void enroll(imageBase64, currentUserId)
+
+            // If we have enough frames, trigger enrollment
+            if (newFrames.length >= REGISTRATION_FRAME_COUNT) {
+              hasEnrolled = true
+              if (timerRef.current) clearInterval(timerRef.current)
+              setState((s) => ({
+                ...s,
+                capturedFrame: `data:image/jpeg;base64,${imageBase64}`,
+              }))
+              void enrollWithFrames(newFrames)
+            }
           }
         })
         .catch((err) => {
@@ -190,7 +266,7 @@ export function useRegister(
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
-  }, [captureFrameBase64, enroll, state.phase])
+  }, [captureFrameBase64, enroll, enrollWithFrames, state.phase])
 
   // ── Countdown timer display (separate from capture logic) ──────────────────────────
   useEffect(() => {
