@@ -3,8 +3,10 @@ from dotenv import load_dotenv
 load_dotenv()
 import cv2
 import numpy as np
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+
+from pydantic import BaseModel
 
 from fas.schemas import LivenessInferRequest, LivenessInferResponse
 from fas.service import LivenessService
@@ -83,6 +85,23 @@ def identify_face(payload: FaceIdentifyRequest) -> FaceIdentifyResponse:
 @app.post("/v1/auth/verify", response_model=FaceVerifyResponse)
 def verify_face(payload: FaceVerifyRequest) -> FaceVerifyResponse:
     return auth_service.verify(payload)
+
+
+class EmbedRequest(BaseModel):
+    image_base64: str
+
+
+class EmbedResponse(BaseModel):
+    embedding: list[float]
+
+
+@app.post("/v1/auth/embed", response_model=EmbedResponse)
+def embed_face(payload: EmbedRequest) -> EmbedResponse:
+    embedding = auth_service.get_embedding(payload.image_base64)
+    if embedding is None:
+        raise HTTPException(status_code=400, detail="Could not extract face embedding")
+    return EmbedResponse(embedding=embedding.tolist())
+
 
 @app.post('/v1/liveness/frame/debug', response_model=LivenessInferResponse)
 def infer_frame_debug(payload: LivenessInferRequest, session_id: str = 'default') -> LivenessInferResponse:

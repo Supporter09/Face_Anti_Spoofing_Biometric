@@ -36,6 +36,13 @@ class FaceAuthService:
             except ValueError:
                 self.threshold = 0.50
 
+    def get_embedding(self, image_base64: str) -> np.ndarray | None:
+        """Extract face embedding from a single image."""
+        decoded = decode_base64_image_to_bgr(image_base64)
+        if decoded.image_bgr is None:
+            return None
+        return self.recognition_model.get_embedding(decoded.image_bgr)
+
     def enroll(self, request: FaceEnrollRequest) -> FaceEnrollResponse:
         decoded = decode_base64_image_to_bgr(request.image_base64)
 
