@@ -340,19 +340,26 @@ export function useSession(
         throw new Error('Không nhận được phản hồi từ server')
       }
 
-      // Average the similarities
+      // Average the similarities and determine auth status
       const similarities = results.map((r) => r.similarity ?? 0)
       const avgSimilarity = similarities.reduce((a, b) => a + b, 0) / similarities.length
+      const AUTH_THRESHOLD = 0.5
+      const isAuthenticated = avgSimilarity >= AUTH_THRESHOLD
 
-      // Use the identify result from the best frame for user_id
-      const bestResult = results[0]
+      // Determine user_id: use most common result, or best frame's if all same
+      const userIds = results.map((r) => r.user_id).filter(Boolean)
+      const identifiedUser = userIds.length > 0
+        ? userIds.sort((a, b) => userIds.filter(v => v === a).length - userIds.filter(v => v === b).length).pop()
+        : null
 
       setState((s) => ({
         ...s,
-        auth_status: bestResult.authenticated ? 'authenticated' : 'failed',
-        auth_message: bestResult.message,
+        auth_status: isAuthenticated ? 'authenticated' : 'failed',
+        auth_message: isAuthenticated
+          ? `Xác thực thành công (${(avgSimilarity * 100).toFixed(1)}%)`
+          : `Xác thực thất bại (${(avgSimilarity * 100).toFixed(1)}%)`,
         similarity: avgSimilarity,
-        identified_user: bestResult.authenticated ? bestResult.user_id : null,
+        identified_user: isAuthenticated ? identifiedUser : null,
       }))
     } catch (err) {
       setState((s) => ({
