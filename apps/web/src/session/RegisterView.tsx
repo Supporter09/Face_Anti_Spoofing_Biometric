@@ -94,6 +94,11 @@ export function RegisterView({ videoRef, canvasRef, onBack }: Props) {
             {Math.abs(state.latest_yaw) <= 10 ? '✓ Đã căn giữa' : '↔ Cần căn giữa'})
             </div>
           )}
+          {(state.phase === 'countdown' || state.phase === 'capturing') && state.captured_frames.length > 0 && (
+            <div className="session-yaw-indicator">
+              Đang thu thập: {state.captured_frames.length}/5 khung hình
+            </div>
+          )}
           {isLoading && (
             <div className="register-processing-overlay">
               <div className="register-spinner" />
