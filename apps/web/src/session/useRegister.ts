@@ -135,23 +135,6 @@ export function useRegister(
     const tick = () => {
       const elapsed = Date.now() - startedAt
       const currentUserId = stateRef.current.userId
-      // Calculate countdown from elapsed time (same as countdown effect)
-      const countdownFromElapsed = Math.max(0, COUNTDOWN_SEC - Math.floor(elapsed / 1000))
-
-      // If countdown completed (reached 0), enroll with current frame regardless of yaw
-      if (countdownFromElapsed === 0 && !hasEnrolled) {
-        hasEnrolled = true
-        if (timerRef.current) clearInterval(timerRef.current)
-        const imageBase64 = captureFrameBase64()
-        if (imageBase64) {
-          setState((s) => ({
-            ...s,
-            capturedFrame: `data:image/jpeg;base64,${imageBase64}`,
-          }))
-          void enroll(imageBase64, currentUserId)
-        }
-        return
-      }
 
       // Timeout check
       if (elapsed >= REGISTER_TIMEOUT_MS) {
