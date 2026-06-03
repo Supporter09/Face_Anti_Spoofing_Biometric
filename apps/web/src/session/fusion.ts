@@ -163,3 +163,27 @@ export function selectBestFramesForAuth(
   return goodFrames.slice(0, count)
 }
 
+/**
+ * Average multiple embeddings into a single template.
+ * @param embeddings Array of embedding arrays (each 512-dim)
+ * @returns Mean embedding as flat array
+ */
+export function meanEmbeddings(embeddings: number[][]): number[] {
+  if (embeddings.length === 0) return []
+  if (embeddings.length === 1) return embeddings[0]
+
+  const dim = embeddings[0].length
+  const result = new Array(dim).fill(0)
+
+  for (const emb of embeddings) {
+    for (let i = 0; i < dim; i++) {
+      result[i] += emb[i]
+    }
+  }
+
+  for (let i = 0; i < dim; i++) {
+    result[i] /= embeddings.length
+  }
+
+  return result
+}
