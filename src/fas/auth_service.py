@@ -46,23 +46,31 @@ class FaceAuthService:
         return self.recognition_model.get_embedding(decoded.image_bgr)
 
     def enroll(self, request: FaceEnrollRequest) -> FaceEnrollResponse:
-        decoded = decode_base64_image_to_bgr(request.image_base64)
-
-        if decoded.image_bgr is None:
-            return FaceEnrollResponse(
-                success=False,
-                user_id=request.user_id,
-                message=decoded.error or "Could not decode image payload.",
-            )
-
-        embedding = self.recognition_model.get_embedding(decoded.image_bgr)
+        # Use pre-computed embedding if provided, otherwise extract from image
+        if request.embedding is not None:
+            embedding = np.array(request.embedding, dtype=np.float32)
+        else:
+            if request.image_base64 is None:
+                return FaceEnrollResponse(
+                    success=False,
+                    user_id=request.user_id,
+                    message="Either image_base64 or embedding must be provided.",
+                )
+            decoded = decode_base64_image_to_bgr(request.image_base64)
+            if decoded.image_bgr is None:
+                return FaceEnrollResponse(
+                    success=False,
+                    user_id=request.user_id,
+                    message=decoded.error or "Could not decode image payload.",
+                )
+            embedding = self.recognition_model.get_embedding(decoded.image_bgr)
 
         if embedding is None:
-            reason = self.recognition_model.unavailable_reason
+            reason = self.recognition_model.unavailable_reason if hasattr(self.recognition_model, 'unavailable_reason') else "No face detected"
             return FaceEnrollResponse(
                 success=False,
                 user_id=request.user_id,
-                message=reason or "No face was detected for enrollment.",
+                message=reason or "Could not extract face embedding from image.",
             )
 
         self.store.save_template(request.user_id, embedding)
