@@ -240,7 +240,13 @@ export function useRegister(
           const isCentered = faceDetected && yaw !== null && Math.abs(yaw) <= YAW_CENTER
           const currentFrames = stateRef.current.captured_frames
 
-          if (!hasEnrolled && countdownComplete && isCentered && !currentFrames.includes(imageBase64)) {
+          // Check both: centered face AND minimum gap passed
+          const now = Date.now()
+          const gapSufficient = now - lastCapturedRef.current >= MIN_FRAME_GAP_MS
+
+          if (!hasEnrolled && countdownComplete && isCentered && gapSufficient && !currentFrames.includes(imageBase64)) {
+            lastCapturedRef.current = now  // Update last capture time
+
             const newFrames = [...currentFrames, imageBase64]
             setState((s) => ({
               ...s,
