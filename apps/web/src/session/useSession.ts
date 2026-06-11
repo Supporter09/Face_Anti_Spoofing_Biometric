@@ -220,7 +220,7 @@ export function useSession(
         const response = await fetch(`${API_BASE}${frameEndpoint}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image_base64: queued.imageBase64 }),
+          body: JSON.stringify({ image_base64: queued.imageBase64, phase: current.phase }),
         })
         if (!response.ok) throw new Error(`API request failed with status ${response.status}`)
 
