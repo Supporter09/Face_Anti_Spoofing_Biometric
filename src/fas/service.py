@@ -344,10 +344,16 @@ class LivenessService:
             'session_id': session,
             'captured_at_utc': ts,
             'has_image_payload': bool(request.image_base64),
+            'current_phase': request.phase,
             'overlay_path': overlay_path,
             'context_model_input_raw_path': context_path,
             'model_input_resized_path': model_input_path,
             'context_crop_used': bool(detection is not None and getattr(detection, 'context_crop_bgr', None) is not None),
+            'liveness_score': response.liveness_score,
+            'liveness_label': str(response.liveness_label),
+            'face_detected': response.face_detected,
+            'yaw_deg': response.yaw_deg,
+            'detection_confidence': detection.confidence if detection else None,
             'response': response.model_dump(),
         }
         (Path(str(base) + '_meta.json')).write_text(json.dumps(meta, indent=2))
