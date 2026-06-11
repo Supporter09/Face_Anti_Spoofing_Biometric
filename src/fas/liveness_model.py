@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 
 import numpy as np
 
@@ -79,6 +80,13 @@ class TorchLivenessModel:
 
         score = self._extract_live_score(logits)
         return max(0.0, min(1.0, score))
+
+    def predict_live_score_with_latency(self, face_crop_bgr: np.ndarray) -> tuple[float, float]:
+        """Return (score, latency_ms) for a single inference call."""
+        started = perf_counter()
+        score = self.predict_live_score(face_crop_bgr)
+        latency = (perf_counter() - started) * 1000
+        return score, latency
 
     def predict_live_score_debug(self, face_crop_bgr: np.ndarray) -> tuple[float, dict]:
         """Same as predict_live_score but also returns intermediate debug info."""
