@@ -8,6 +8,7 @@ LivenessLabel = Literal['live', 'spoof', 'no_face', 'uncertain']
 
 class LivenessInferRequest(BaseModel):
     image_base64: str | None = Field(default=None, description='Base64 encoded image payload.')
+    phase: str | None = Field(default=None, description='Current liveness phase (forward, turn_A, center_1, turn_B, blink).')
 
 
 class LivenessInferResponse(BaseModel):
