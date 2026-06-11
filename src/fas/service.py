@@ -179,6 +179,7 @@ class LivenessService:
                 crop_for_model=crop_for_model,
                 live_score=live_score,
                 debug_info=(debug_info or {}).copy(),
+                pose=pose,
             )
 
         if capture_debug:
@@ -228,6 +229,7 @@ class LivenessService:
         crop_for_model: np.ndarray,
         live_score: float,
         debug_info: dict,
+        pose: dict[str, float] | None = None,
     ) -> None:
         try:
             import cv2  # type: ignore
@@ -263,11 +265,17 @@ class LivenessService:
             cv2.imwrite(str(prefix) + '_4_model_input_vis.jpg', vis_norm_bgr)
 
         # 5. JSON metadata
+        face_detected = bool(detection is not None and len(getattr(detection, 'bbox_xyxy', [])) == 4)
         meta = {
             'frame': n,
             'timestamp_ms': ts,
             'live_score': live_score,
             'label': label,
+            'liveness_score': live_score,
+            'liveness_label': label,
+            'face_detected': face_detected,
+            'yaw_deg': pose.get('yaw_deg') if pose and pose.get('ok') else None,
+            'detection_confidence': float(detection.confidence) if detection is not None and hasattr(detection, 'confidence') and detection.confidence is not None else None,
             'threshold_live': self.threshold_live,
             'threshold_spoof': self.threshold_spoof,
             'face_bbox_xyxy': list(detection.bbox_xyxy),
