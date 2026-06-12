@@ -134,13 +134,15 @@ export function useRegister(
       const { meanEmbeddings } = await import('./fusion')
       const avgEmbedding = meanEmbeddings(embeddings)
 
-      // Enroll with pre-computed embedding
+      // Enroll with pre-computed embedding + first frame for image storage
+      const enrollImage = frames[0]  // Use first captured frame as enrollment image
       const response = await fetch(`${API_BASE}/v1/auth/enroll`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: stateRef.current.userId,
           embedding: avgEmbedding,
+          image_base64: enrollImage,
         }),
       })
 
