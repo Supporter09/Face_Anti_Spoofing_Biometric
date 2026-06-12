@@ -40,17 +40,18 @@ _init_db()
 
 
 class FaceTemplateStore:
-    def save_template(self, user_id: str, embedding: np.ndarray) -> None:
+    def save_template(self, user_id: str, embedding: np.ndarray, image_base64: str | None = None) -> None:
         embedding_list = embedding.astype(float).tolist()
         with _get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO face_templates (user_id, embedding)
-                    VALUES (%s, %s)
+                    INSERT INTO face_templates (user_id, embedding, image_base64)
+                    VALUES (%s, %s, %s)
                     ON CONFLICT (user_id) DO UPDATE
-                        SET embedding   = EXCLUDED.embedding,
-                            enrolled_at = NOW()
-                """, (user_id, embedding_list))
+                        SET embedding    = EXCLUDED.embedding,
+                            image_base64 = EXCLUDED.image_base64,
+                            enrolled_at  = NOW()
+                """, (user_id, embedding_list, image_base64))
             conn.commit()
 
     def get_template(self, user_id: str) -> np.ndarray | None:
@@ -65,6 +66,19 @@ class FaceTemplateStore:
             return None
         return np.asarray(row[0], dtype=np.float32)
 
+    def get_template_with_image(self, user_id: str) -> tuple[np.ndarray | None, str | None]:
+        """Returns (embedding, image_base64) tuple. Embedding is None if user not found."""
+        with _get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT embedding, image_base64 FROM face_templates WHERE user_id = %s",
+                    (user_id,),
+                )
+                row = cur.fetchone()
+        if row is None:
+            return None, None
+        return np.asarray(row[0], dtype=np.float32), row[1]
+
     def get_all_templates(self) -> dict[str, np.ndarray]:
         with _get_connection() as conn:
             with conn.cursor() as cur:
@@ -73,6 +87,17 @@ class FaceTemplateStore:
         return {
             user_id: np.asarray(embedding, dtype=np.float32)
             for user_id, embedding in rows
+        }
+
+    def get_all_templates_with_images(self) -> dict[str, tuple[np.ndarray, str | None]]:
+        """Returns dict of user_id -> (embedding, image_base64) for all enrolled users."""
+        with _get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT user_id, embedding, image_base64 FROM face_templates")
+                rows = cur.fetchall()
+        return {
+            user_id: (np.asarray(embedding, dtype=np.float32), image_base64)
+            for user_id, embedding, image_base64 in rows
         }
 
     def user_exists(self, user_id: str) -> bool:
