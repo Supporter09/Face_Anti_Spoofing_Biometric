@@ -325,8 +325,11 @@ export function useSession(
       }
 
       // Run auth requests in parallel
+      const authUrl = captureDebug
+        ? `${API_BASE}/v1/auth/identify?capture_debug=1&debug_session=${encodeURIComponent(captureSessionId)}`
+        : `${API_BASE}/v1/auth/identify`
       const authPromises = bestFrames.map((frame) =>
-        fetch(`${API_BASE}/v1/auth/identify`, {
+        fetch(authUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ image_base64: frame.image_base64 }),
