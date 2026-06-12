@@ -73,7 +73,7 @@ class FaceAuthService:
                 message=reason or "Could not extract face embedding from image.",
             )
 
-        self.store.save_template(request.user_id, embedding)
+        self.store.save_template(request.user_id, embedding, request.image_base64)
 
         return FaceEnrollResponse(
             success=True,
