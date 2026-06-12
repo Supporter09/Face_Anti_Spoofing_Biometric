@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 load_dotenv()
 import cv2
 import numpy as np
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from pydantic import BaseModel
@@ -79,8 +79,16 @@ def enroll_face(payload: FaceEnrollRequest) -> FaceEnrollResponse:
     return auth_service.enroll(payload)
 
 @app.post("/v1/auth/identify", response_model=FaceIdentifyResponse)
-def identify_face(payload: FaceIdentifyRequest) -> FaceIdentifyResponse:
-    return auth_service.identify(payload)
+def identify_face(
+    payload: FaceIdentifyRequest,
+    capture_debug: bool = Query(False, description="Save debug frames for this request"),
+    debug_session: str = Query('default', description="Session ID for debug output grouping"),
+) -> FaceIdentifyResponse:
+    return auth_service.identify(
+        payload,
+        capture_debug=capture_debug,
+        debug_session_id=debug_session,
+    )
 
 @app.post("/v1/auth/verify", response_model=FaceVerifyResponse)
 def verify_face(payload: FaceVerifyRequest) -> FaceVerifyResponse:
