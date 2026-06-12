@@ -23,8 +23,14 @@ def _init_db() -> None:
                 CREATE TABLE IF NOT EXISTS face_templates (
                     user_id     TEXT PRIMARY KEY,
                     embedding   DOUBLE PRECISION[],
+                    image_base64 TEXT,
                     enrolled_at TIMESTAMPTZ DEFAULT NOW()
                 )
+            """)
+            # Add column if it doesn't exist (for existing databases)
+            cur.execute("""
+                ALTER TABLE face_templates
+                ADD COLUMN IF NOT EXISTS image_base64 TEXT
             """)
         conn.commit()
 
