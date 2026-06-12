@@ -215,26 +215,34 @@ class FaceAuthService:
         similarity: float,
         authenticated: bool,
     ) -> None:
+        print(f'[DEBUG] _save_enrollment_debug: user={user_id}, session={session_id}')
+
         try:
             import cv2  # type: ignore
         except ImportError:
+            print('[DEBUG] cv2 not available')
             return
 
         _, image_base64 = self.store.get_template_with_image(user_id)
+        print(f'[DEBUG] image_base64 found: {image_base64 is not None}')
         if image_base64 is None:
+            print('[DEBUG] No enrollment image in DB for user')
             return
 
         root = Path(os.environ.get('AUTH_DEBUG_DIR', 'reports/auth_debug_frames'))
         session = self._sanitize_debug_session_id(session_id)
         session_dir = root / session
         session_dir.mkdir(parents=True, exist_ok=True)
+        print(f'[DEBUG] Writing to: {session_dir}')
 
         ts = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S_%fZ')
         base = session_dir / ts
 
         decoded = decode_base64_image_to_bgr(image_base64)
+        print(f'[DEBUG] decoded.image_bgr: {decoded.image_bgr is not None}')
         if decoded.image_bgr is not None:
             cv2.imwrite(str(base) + '_enrolled_face.jpg', decoded.image_bgr)
+            print(f'[DEBUG] Wrote image: {base}_enrolled_face.jpg')
 
         meta = {
             'session_id': session,
@@ -246,3 +254,4 @@ class FaceAuthService:
             'enrolled_image_saved': decoded.image_bgr is not None,
         }
         (session_dir / f'{base.name}_meta.json').write_text(json.dumps(meta, indent=2))
+        print(f'[DEBUG] Wrote meta: {base}_meta.json')
