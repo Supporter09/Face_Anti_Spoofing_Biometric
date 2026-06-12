@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import json
 import os
+import re
+from datetime import datetime, timezone
+from pathlib import Path
 
 import numpy as np
 
@@ -131,7 +135,13 @@ class FaceAuthService:
             ),
         )
 
-    def identify(self, request: FaceIdentifyRequest) -> FaceIdentifyResponse:
+    def identify(
+        self,
+        request: FaceIdentifyRequest,
+        *,
+        capture_debug: bool = False,
+        debug_session_id: str = 'default',
+    ) -> FaceIdentifyResponse:
         """Compare against all enrolled users, return the closest match."""
         all_templates = self.store.get_all_templates()
 
@@ -172,6 +182,14 @@ class FaceAuthService:
         best_similarity = cosine_similarity(current_embedding, all_templates[best_user_id])
         authenticated = best_similarity >= self.threshold
 
+        if capture_debug:
+            self._save_enrollment_debug(
+                user_id=best_user_id,
+                session_id=debug_session_id,
+                similarity=best_similarity,
+                authenticated=authenticated,
+            )
+
         return FaceIdentifyResponse(
             authenticated=authenticated,
             user_id=best_user_id,
@@ -183,3 +201,48 @@ class FaceAuthService:
                 else f"No confident match (closest: {best_user_id}, score: {best_similarity:.3f})."
             ),
         )
+
+    @staticmethod
+    def _sanitize_debug_session_id(value: str) -> str:
+        cleaned = re.sub(r'[^A-Za-z0-9._-]+', '_', value).strip('._-')
+        return cleaned or 'default'
+
+    def _save_enrollment_debug(
+        self,
+        *,
+        user_id: str,
+        session_id: str,
+        similarity: float,
+        authenticated: bool,
+    ) -> None:
+        try:
+            import cv2  # type: ignore
+        except ImportError:
+            return
+
+        _, image_base64 = self.store.get_template_with_image(user_id)
+        if image_base64 is None:
+            return
+
+        root = Path(os.environ.get('AUTH_DEBUG_DIR', 'reports/auth_debug_frames'))
+        session = self._sanitize_debug_session_id(session_id)
+        session_dir = root / session
+        session_dir.mkdir(parents=True, exist_ok=True)
+
+        ts = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S_%fZ')
+        base = session_dir / ts
+
+        decoded = decode_base64_image_to_bgr(image_base64)
+        if decoded.image_bgr is not None:
+            cv2.imwrite(str(base) + '_enrolled_face.jpg', decoded.image_bgr)
+
+        meta = {
+            'session_id': session,
+            'captured_at_utc': ts,
+            'matched_user_id': user_id,
+            'similarity': similarity,
+            'authenticated': authenticated,
+            'threshold': self.threshold,
+            'enrolled_image_saved': decoded.image_bgr is not None,
+        }
+        (session_dir / f'{base.name}_meta.json').write_text(json.dumps(meta, indent=2))
