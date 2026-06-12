@@ -346,8 +346,9 @@ export function useSession(
       // Average the similarities and determine auth status
       const similarities = results.map((r) => r.similarity ?? 0)
       const avgSimilarity = similarities.reduce((a, b) => a + b, 0) / similarities.length
-      const AUTH_THRESHOLD = 0.5
-      const isAuthenticated = avgSimilarity >= AUTH_THRESHOLD
+      // Use threshold from server response, fallback to 0.5
+      const authThreshold = results[0]?.threshold ?? 0.5
+      const isAuthenticated = avgSimilarity >= authThreshold
 
       // Determine user_id: use most common result, or best frame's if all same
       const userIds = results.map((r) => r.user_id).filter(Boolean)
