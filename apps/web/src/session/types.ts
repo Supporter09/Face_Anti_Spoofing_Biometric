@@ -17,6 +17,7 @@ export interface FrameRecord {
   passive_score: number
   yaw_deg: number | null
   pose_ok: boolean
+  image_base64?: string
 }
 
 export interface ChallengeEval {
@@ -52,4 +53,12 @@ export interface FrameApiResponse {
   /** 5 landmarks: [left_eye, right_eye, nose, mouth_left, mouth_right] each as [x, y] */
   face_landmarks: [number, number][] | null
   message?: string | null
+}
+export interface AuthResponse {
+  authenticated?: boolean
+  success?: boolean
+  user_id: string
+  similarity?: number
+  threshold?: number
+  message: string
 }

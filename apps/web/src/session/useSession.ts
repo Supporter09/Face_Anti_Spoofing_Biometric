@@ -1,15 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { computeVerdict, YAW_CENTER, YAW_TARGET } from './fusion'
+import { computeVerdict, selectBestFramesForAuth, YAW_CENTER, YAW_TARGET } from './fusion'
 import type { FrameApiResponse, FrameRecord, Phase, TurnDirection, Verdict } from './types'
 
+interface QueuedFrame {
+  id: number
+  imageBase64: string
+  timestamp: number
+  phase: FrameRecord['phase']
+  turn_A_dir: TurnDirection
+  resolve: (frame: FrameRecord) => void
+  reject: (error: Error) => void
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
-const CAPTURE_INTERVAL_MS = 100
+const CAPTURE_INTERVAL_MS = 20
 const COUNTDOWN_MS = 3000  // 3s so backend JIT warmup (TorchScript first-inference) finishes before first frame
-const REQUIRED_CONSECUTIVE_FRAMES = 5
+const REQUIRED_CONSECUTIVE_FRAMES = 20
 const CAPTURE_WIDTH = 640
 const CAPTURE_HEIGHT = 480
 const JPEG_QUALITY = 0.85
+
+// Queue configuration
+const NUM_WORKERS = 3
+const MAX_QUEUE_SIZE = 3
+const AUTH_FRAME_COUNT = 3  // Number of frames to average for authentication
 
 const PHASE_TIMEOUT_MS: Record<FrameRecord['phase'], number> = {
   forward: 3000,  // 2s was tight if camera startup adds latency at phase start
@@ -35,6 +50,10 @@ export interface SessionState {
   /** 5 landmarks [left_eye, right_eye, nose, mouth_left, mouth_right] in capture coords */
   latest_landmarks: [number, number][] | null
   error: string | null
+  auth_status: 'idle' | 'verifying' | 'authenticated' | 'failed'
+  auth_message: string | null
+  similarity: number | null
+  identified_user: string | null
 }
 
 function getTurnBDir(turn_A_dir: TurnDirection): TurnDirection {
@@ -68,6 +87,10 @@ function initialState(): SessionState {
     latest_bbox: null,
     latest_landmarks: null,
     error: null,
+    auth_status: 'idle',
+    auth_message: null,
+    similarity: null,
+    identified_user: null,
   }
 }
 
@@ -84,13 +107,18 @@ export function useSession(
   reset: () => void
   isDiagnose: boolean
 } {
+  const searchParams = new URLSearchParams(window.location.search)
   // Diagnose mode: all phases run to timeout; no early advancement.
   // Activate via ?diagnose=1 in URL.
-  const isDiagnose = new URLSearchParams(window.location.search).has('diagnose')
+  const isDiagnose = searchParams.has('diagnose')
+  const captureDebug = searchParams.get('capture_debug') === '1'
+  const captureSessionId = searchParams.get('capture_session') ?? 'web_session'
 
   const [state, setState] = useState<SessionState>(initialState)
   const stateRef = useRef(state)
-  const inFlightRef = useRef(false)
+  const queueRef = useRef<QueuedFrame[]>([])
+  const activeWorkersRef = useRef(0)
+  const frameIdRef = useRef(0)
   const consecutiveRef = useRef(0)
   const phaseStartedAtRef = useRef(0)
   const sessionStartedAtRef = useRef(0)
@@ -112,7 +140,9 @@ export function useSession(
   }, [])
 
   const reset = useCallback(() => {
-    inFlightRef.current = false
+    queueRef.current = []
+    activeWorkersRef.current = 0
+    frameIdRef.current = 0
     consecutiveRef.current = 0
     smoothedYawRef.current = null
     phaseStartedAtRef.current = 0
@@ -165,69 +195,215 @@ export function useSession(
     else setPhase('evaluating')
   }, [setPhase])
 
-  const captureAndSend = useCallback(async () => {
+  const processQueue = useCallback(() => {
+    const processNext = async () => {
+      const queue = queueRef.current
+      const current = stateRef.current
+
+      // Check if we should stop - let finally block handle worker decrement
+      if (!isActivePhase(current.phase) || queue.length === 0) {
+        return
+      }
+
+      // Get next frame from queue (FIFO)
+      const queued = queue.shift()
+      if (!queued) {
+        return
+      }
+
+      // Worker already incremented at the call site, don't increment again
+
+      try {
+        const frameEndpoint = captureDebug
+          ? `/v1/liveness/frame/debug?session_id=${encodeURIComponent(captureSessionId)}`
+          : '/v1/liveness/frame'
+        const response = await fetch(`${API_BASE}${frameEndpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image_base64: queued.imageBase64, phase: current.phase }),
+        })
+        if (!response.ok) throw new Error(`API request failed with status ${response.status}`)
+
+        const payload = (await response.json()) as FrameApiResponse
+        const rawYaw = payload.yaw_deg
+        const smoothedYaw =
+          rawYaw === null
+            ? null
+            : smoothedYawRef.current === null
+              ? rawYaw
+              : 0.5 * smoothedYawRef.current + 0.5 * rawYaw
+        smoothedYawRef.current = smoothedYaw
+
+        // Use current phase from stateRef (not queued.phase) because frames may be processed after phase changed
+        const currentPhase = stateRef.current.phase
+
+        const frame: FrameRecord = {
+          ts_ms: Date.now() - sessionStartedAtRef.current,
+          phase: currentPhase,
+          face_detected: payload.face_detected,
+          passive_score: payload.liveness_score,
+          yaw_deg: smoothedYaw,
+          pose_ok: payload.pose_ok,
+          image_base64: queued.imageBase64,
+        }
+
+        // Check phase advancement criteria using current phase
+        const criterionMet =
+          payload.face_detected && payload.pose_ok && phaseCriterionMet(currentPhase, smoothedYaw, queued.turn_A_dir)
+
+        setState((latest) => ({
+          ...latest,
+          frames: [...latest.frames, frame],
+          latest_yaw: smoothedYaw,
+          latest_passive: payload.liveness_score,
+          face_detected: payload.face_detected,
+          latest_bbox: payload.face_bbox_xyxy ?? null,
+          latest_landmarks: (payload.face_landmarks as [number, number][] | null) ?? null,
+          error: null,
+        }))
+
+        // Update consecutive counter and check phase advancement
+        const currentState = stateRef.current
+        if (!isDiagnose && criterionMet && isActivePhase(currentState.phase)) {
+          const newConsecutive = (consecutiveRef.current || 0) + 1
+          consecutiveRef.current = newConsecutive
+          if (newConsecutive >= REQUIRED_CONSECUTIVE_FRAMES) {
+            advanceFrom(currentState.phase)
+          }
+        }
+
+        queued.resolve(frame)
+      } catch (caughtError) {
+        const error = caughtError instanceof Error ? caughtError : new Error('Unexpected error')
+        setState((latest) => ({
+          ...latest,
+          error: error.message,
+        }))
+        queued.reject(error)
+      } finally {
+        // First decrement the current worker (it's done)
+        activeWorkersRef.current = Math.max(0, activeWorkersRef.current - 1)
+
+        // Then check if we should start a new worker
+        if (queueRef.current.length > 0 && activeWorkersRef.current < NUM_WORKERS) {
+          activeWorkersRef.current++
+          processNext()
+        }
+      }
+    }
+
+    // Start processing if workers available and queue not empty
+    if (activeWorkersRef.current < NUM_WORKERS && queueRef.current.length > 0) {
+      activeWorkersRef.current++
+      processNext()
+    }
+  }, [captureDebug, captureSessionId, isDiagnose, phaseCriterionMet, advanceFrom])
+
+  const authenticate = useCallback(async () => {
+    const { frames, turn_A_dir } = stateRef.current
+    if (!turn_A_dir || frames.length === 0) return
+
+    setState((s) => ({
+      ...s,
+      auth_status: 'verifying',
+      auth_message: 'Đang xác thực...',
+      identified_user: null,
+    }))
+
+    try {
+      // Calculate yaw baseline from forward phase frames
+      const forwardFrames = frames.filter((f) => f.phase === 'forward' && f.yaw_deg !== null)
+      const yawBaseline = forwardFrames.length > 0
+        ? forwardFrames.reduce((a, b) => a + b.yaw_deg!, 0) / forwardFrames.length
+        : 0
+
+      // Select top best frames for auth
+      const bestFrames = selectBestFramesForAuth(frames, yawBaseline, AUTH_FRAME_COUNT)
+
+      if (bestFrames.length === 0) {
+        throw new Error('Không đủ khung hình tốt để xác thực')
+      }
+
+      // Run auth requests in parallel
+      const authUrl = captureDebug
+        ? `${API_BASE}/v1/auth/identify?capture_debug=1&debug_session=${encodeURIComponent(captureSessionId)}`
+        : `${API_BASE}/v1/auth/identify`
+      const authPromises = bestFrames.map((frame) =>
+        fetch(authUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image_base64: frame.image_base64 }),
+        }).then((res) => res.json())
+      )
+
+      const results = await Promise.all(authPromises)
+
+      // Validate results
+      if (!results.length || !results[0]) {
+        throw new Error('Không nhận được phản hồi từ server')
+      }
+
+      // Average the similarities and determine auth status
+      const similarities = results.map((r) => r.similarity ?? 0)
+      const avgSimilarity = similarities.reduce((a, b) => a + b, 0) / similarities.length
+      // Use threshold from server response, fallback to 0.5
+      const authThreshold = results[0]?.threshold ?? 0.5
+      const isAuthenticated = avgSimilarity >= authThreshold
+
+      // Determine user_id: use most common result, or best frame's if all same
+      const userIds = results.map((r) => r.user_id).filter(Boolean)
+      const identifiedUser = userIds.length > 0
+        ? userIds.sort((a, b) => userIds.filter(v => v === a).length - userIds.filter(v => v === b).length).pop()
+        : null
+
+      setState((s) => ({
+        ...s,
+        auth_status: isAuthenticated ? 'authenticated' : 'failed',
+        auth_message: isAuthenticated
+          ? `Xác thực thành công (${(avgSimilarity * 100).toFixed(1)}%)`
+          : `Xác thực thất bại (${(avgSimilarity * 100).toFixed(1)}%)`,
+        similarity: avgSimilarity,
+        identified_user: isAuthenticated ? identifiedUser : null,
+      }))
+    } catch (err) {
+      setState((s) => ({
+        ...s,
+        auth_status: 'failed',
+        auth_message: err instanceof Error ? err.message : 'Authentication failed',
+        identified_user: null,
+      }))
+    }
+  }, [])
+
+  const captureAndSend = useCallback(() => {
     const current = stateRef.current
-    if (!isActivePhase(current.phase) || !current.turn_A_dir || inFlightRef.current) return
+    if (!isActivePhase(current.phase) || !current.turn_A_dir) return
+
+    // Check queue capacity - drop frame if queue is full
+    if (queueRef.current.length >= MAX_QUEUE_SIZE) return
 
     const imageBase64 = captureFrameBase64()
     if (!imageBase64) return
 
-    inFlightRef.current = true
-    try {
-      const response = await fetch(`${API_BASE}/v1/liveness/frame`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image_base64: imageBase64 }),
-      })
-      if (!response.ok) throw new Error(`API request failed with status ${response.status}`)
-
-      const payload = (await response.json()) as FrameApiResponse
-      const frame: FrameRecord = {
-        ts_ms: Date.now() - sessionStartedAtRef.current,
+    // Create promise-based frame capture and add to queue
+    return new Promise<void>((resolve, reject) => {
+      const queued: QueuedFrame = {
+        id: frameIdRef.current++,
+        imageBase64,
+        timestamp: Date.now(),
         phase: current.phase,
-        face_detected: payload.face_detected,
-        passive_score: payload.liveness_score,
-        yaw_deg: payload.yaw_deg,
-        pose_ok: payload.pose_ok,
+        turn_A_dir: current.turn_A_dir,
+        resolve: (frame) => {
+          // The original QueuedFrame.resolve expected FrameRecord
+          // We just resolve the promise as void for captureAndSend's return type
+          resolve()
+        },
+        reject,
       }
-
-      const rawYaw = payload.yaw_deg
-      const smoothedYaw =
-        rawYaw === null
-          ? null
-          : smoothedYawRef.current === null
-            ? rawYaw
-            : 0.5 * smoothedYawRef.current + 0.5 * rawYaw
-      smoothedYawRef.current = smoothedYaw
-
-      const criterionMet =
-        payload.face_detected && payload.pose_ok && phaseCriterionMet(current.phase, smoothedYaw, current.turn_A_dir)
-      consecutiveRef.current = criterionMet ? consecutiveRef.current + 1 : 0
-
-      setState((latest) => ({
-        ...latest,
-        frames: [...latest.frames, frame],
-        latest_yaw: payload.yaw_deg,
-        latest_passive: payload.liveness_score,
-        face_detected: payload.face_detected,
-        latest_bbox: payload.face_bbox_xyxy ?? null,
-        latest_landmarks: (payload.face_landmarks as [number, number][] | null) ?? null,
-        error: null,
-      }))
-
-      // In diagnose mode every phase runs to timeout so all phases are always captured.
-      if (!isDiagnose && consecutiveRef.current >= REQUIRED_CONSECUTIVE_FRAMES) {
-        advanceFrom(current.phase)
-      }
-    } catch (caughtError) {
-      setState((latest) => ({
-        ...latest,
-        error: caughtError instanceof Error ? caughtError.message : 'Unexpected error.',
-      }))
-    } finally {
-      inFlightRef.current = false
-    }
-  }, [advanceFrom, captureFrameBase64, phaseCriterionMet])
+      queueRef.current.push(queued)
+      processQueue()
+    })
+  }, [captureFrameBase64, processQueue])
 
   useEffect(() => {
     if (state.phase !== 'countdown') return
@@ -267,13 +443,22 @@ export function useSession(
   useEffect(() => {
     if (state.phase !== 'evaluating' || !state.turn_A_dir) return
 
-    const verdict = computeVerdict(state.frames, state.turn_A_dir, Date.now() - sessionStartedAtRef.current)
+    const verdict = computeVerdict(
+      state.frames,
+      state.turn_A_dir,
+      Date.now() - sessionStartedAtRef.current,
+    )
+
     setState((current) => ({
       ...current,
       phase: 'result',
       verdict,
       instruction: '',
     }))
+
+    if (verdict.verdict === 'LIVE') {
+      void authenticate()
+    }
   }, [state.frames, state.phase, state.turn_A_dir])
 
   return { state, start, reset, isDiagnose }

@@ -21,3 +21,9 @@ models/artifacts/
 reports/generated/
 data/raw/
 data/processed/
+# Added by code-review-graph
+.code-review-graph/
+.mcp.json
+data/stream_store
+data/state_store.db
+.claude/

@@ -11,6 +11,7 @@ class FaceDetection:
     bbox_xyxy: tuple[int, int, int, int]
     landmarks: list[tuple[float, float]]
     aligned_crop_bgr: np.ndarray
+    confidence: float = 0.0
     context_crop_bgr: np.ndarray | None = None   # bbox × 1.8, padded square, NOT resized
 
 

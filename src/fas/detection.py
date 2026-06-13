@@ -90,4 +90,5 @@ class InsightFaceDetector:
             landmarks=landmarks,
             aligned_crop_bgr=aligned_crop,
             context_crop_bgr=context_padded,
+            confidence=float(face.det_score),
         )

@@ -12,12 +12,19 @@
 8. Open `http://127.0.0.1:5173` and run webcam tests.
 9. Open `http://127.0.0.1:5173?legacy=1` only when checking the old MVP UI.
 10. Continue from `progress.md`.
+11. Optional debug capture during web liveness session:
+   - Open frontend with `?capture_debug=1&capture_session=<session_name>`
+   - Frames will be posted to `POST /v1/liveness/frame/debug`
+   - Captures are saved under `reports/liveness_debug_frames/<session_name>/` by default
+   - Override capture root with env: `LIVENESS_DEBUG_CAPTURE_ROOT=/abs/path`
 
 ## Current Focus
 
 - Hybrid context + challenge liveness frontend is implemented locally.
 - Context model artifact: `Kaggle_Outputs/context_mobilenetv2_224/mobilenetv2_context_scripted.pt`.
 - Trained passive threshold: `T_PASSIVE = 0.4`.
+- Debug frame capture endpoint + frontend debug capture flags are available for collecting false-accept/failure evidence.
+- Runtime liveness model input default is now `224` (aligned with context MobileNetV2 artifacts).
 - Next human action: run real webcam sessions through the default UI and collect Tier 2 eval data.
 
 ## Known Risks

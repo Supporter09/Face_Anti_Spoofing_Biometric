@@ -1,12 +1,24 @@
 import base64
-
+from dotenv import load_dotenv
+load_dotenv()
 import cv2
 import numpy as np
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+
+from pydantic import BaseModel
 
 from fas.schemas import LivenessInferRequest, LivenessInferResponse
 from fas.service import LivenessService
+from fas.auth_schemas import (
+    FaceEnrollRequest,
+    FaceEnrollResponse,
+    FaceVerifyRequest,
+    FaceVerifyResponse,
+    FaceIdentifyRequest,
+    FaceIdentifyResponse,
+)
+from fas.auth_service import FaceAuthService
 
 app = FastAPI(title='Face Anti-Spoofing API', version='0.1.0')
 app.add_middleware(
@@ -17,6 +29,35 @@ app.add_middleware(
     allow_headers=['*'],
 )
 service = LivenessService()
+auth_service = FaceAuthService()
+
+
+@app.on_event('startup')
+async def startup_event() -> None:
+    """Pre-load all ML models on startup so first request is fast."""
+    # Warm up InsightFace detector (lazy-loaded on first call)
+    print('[Startup] Loading InsightFace detector...')
+    service.detector._ensure_initialized()
+    print('[Startup] InsightFace detector loaded')
+
+    # Warm up liveness model (eager-loaded, but JIT compiles on first inference)
+    print('[Startup] Warming up liveness model...')
+    dummy_image = np.zeros((80, 80, 3), dtype=np.uint8)
+    try:
+        service.liveness_model.predict_live_score(dummy_image)
+        print('[Startup] Liveness model warmed up')
+    except Exception as e:
+        print(f'[Startup] Liveness model warmup warning: {e}')
+
+    # Warm up recognition model
+    print('[Startup] Loading recognition model...')
+    try:
+        auth_service.recognition_model.get_embedding(dummy_image)
+        print('[Startup] Recognition model warmed up')
+    except Exception as e:
+        print(f'[Startup] Recognition model warmup warning: {e}')
+
+    print('[Startup] All models ready')
 
 
 @app.get('/health')
@@ -32,6 +73,51 @@ def infer_liveness(payload: LivenessInferRequest) -> LivenessInferResponse:
 @app.post('/v1/liveness/frame', response_model=LivenessInferResponse)
 def infer_frame(payload: LivenessInferRequest) -> LivenessInferResponse:
     return service.infer(payload)
+
+@app.post("/v1/auth/enroll", response_model=FaceEnrollResponse)
+def enroll_face(payload: FaceEnrollRequest) -> FaceEnrollResponse:
+    return auth_service.enroll(payload)
+
+@app.post("/v1/auth/identify", response_model=FaceIdentifyResponse)
+def identify_face(
+    payload: FaceIdentifyRequest,
+    capture_debug: bool = Query(False, description="Save debug frames for this request"),
+    debug_session: str = Query('default', description="Session ID for debug output grouping"),
+) -> FaceIdentifyResponse:
+    return auth_service.identify(
+        payload,
+        capture_debug=capture_debug,
+        debug_session_id=debug_session,
+    )
+
+@app.post("/v1/auth/verify", response_model=FaceVerifyResponse)
+def verify_face(payload: FaceVerifyRequest) -> FaceVerifyResponse:
+    return auth_service.verify(payload)
+
+
+class EmbedRequest(BaseModel):
+    image_base64: str
+
+
+class EmbedResponse(BaseModel):
+    embedding: list[float]
+
+
+@app.post("/v1/auth/embed", response_model=EmbedResponse)
+def embed_face(payload: EmbedRequest) -> EmbedResponse:
+    embedding = auth_service.get_embedding(payload.image_base64)
+    if embedding is None:
+        raise HTTPException(status_code=400, detail="Could not extract face embedding")
+    return EmbedResponse(embedding=embedding.tolist())
+
+
+@app.post('/v1/liveness/frame/debug', response_model=LivenessInferResponse)
+def infer_frame_debug(payload: LivenessInferRequest, session_id: str = 'default') -> LivenessInferResponse:
+    return service.infer(
+        payload,
+        capture_debug=True,
+        capture_session_id=session_id,
+    )
 
 
 @app.websocket("/ws/liveness")

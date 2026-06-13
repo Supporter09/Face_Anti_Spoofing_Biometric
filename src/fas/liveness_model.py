@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 
 import numpy as np
 
@@ -10,7 +11,7 @@ import numpy as np
 @dataclass
 class TorchLivenessModel:
     model_path: str | None = None
-    input_size: int = 112
+    input_size: int = 224
 
     def __post_init__(self) -> None:
         self._model = None
@@ -80,6 +81,13 @@ class TorchLivenessModel:
         score = self._extract_live_score(logits)
         return max(0.0, min(1.0, score))
 
+    def predict_live_score_with_latency(self, face_crop_bgr: np.ndarray) -> tuple[float, float]:
+        """Return (score, latency_ms) for a single inference call."""
+        started = perf_counter()
+        score = self.predict_live_score(face_crop_bgr)
+        latency = (perf_counter() - started) * 1000
+        return score, latency
+
     def predict_live_score_debug(self, face_crop_bgr: np.ndarray) -> tuple[float, dict]:
         """Same as predict_live_score but also returns intermediate debug info."""
         if self._model is None or self._torch is None:
@@ -92,8 +100,8 @@ class TorchLivenessModel:
 
         # Step 1: resize to model input size (before norm)
         resized = cv2.resize(face_crop_bgr, (self.input_size, self.input_size))
-        rgb_112 = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
-        arr = rgb_112.astype(np.float32) / 255.0
+        rgb_input = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        arr = rgb_input.astype(np.float32) / 255.0
 
         pixel_stats_before_norm = {
             'mean': float(arr.mean()),
@@ -139,7 +147,7 @@ class TorchLivenessModel:
             'pixel_stats_before_norm': pixel_stats_before_norm,
             'pixel_stats_after_norm': pixel_stats_after_norm,
             # Carry arrays for image saving (not serializable, stripped before JSON dump)
-            '_rgb_112': rgb_112,
+            '_rgb_input': rgb_input,
             '_arr_normed': arr_normed,
         }
         return score, debug

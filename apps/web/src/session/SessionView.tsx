@@ -8,15 +8,12 @@ interface Props {
   state: SessionState
   onStart: () => void
   onReset: () => void
+  onRegister: () => void
 }
 
-// Must match CAPTURE_WIDTH / CAPTURE_HEIGHT in useSession.ts
 const CAP_W = 640
 const CAP_H = 480
-
-// context_margin_ratio in backend detection.py — margin added on each side of bbox
 const CONTEXT_MARGIN_RATIO = 1.2
-
 const LANDMARK_LABELS = ['L_eye', 'R_eye', 'nose', 'L_mouth', 'R_mouth'] as const
 const LANDMARK_COLORS = ['#ff4757', '#3742fa', '#ffa502', '#2ed573', '#1e90ff'] as const
 
@@ -36,14 +33,12 @@ function drawOverlay(
   const bw = x2 - x1
   const bh = y2 - y1
 
-  // ── Context crop region (model input area, dashed orange) ─────────────────
   const mx = bw * CONTEXT_MARGIN_RATIO
   const my = bh * CONTEXT_MARGIN_RATIO
   const cx1 = Math.max(0, x1 - mx)
   const cy1 = Math.max(0, y1 - my)
   const cx2 = Math.min(CAP_W, x2 + mx)
   const cy2 = Math.min(CAP_H, y2 + my)
-  // Pad to square: backend pads the short edge, so show the square version
   const side = Math.max(cx2 - cx1, cy2 - cy1)
   const ccx = (cx1 + cx2) / 2
   const ccy = (cy1 + cy2) / 2
@@ -60,14 +55,12 @@ function drawOverlay(
   ctx.setLineDash([])
   ctx.restore()
 
-  // ── Tight face bbox (solid green) ────────────────────────────────────────
   ctx.save()
   ctx.strokeStyle = '#2ed573'
   ctx.lineWidth = 2.5
   ctx.strokeRect(x1, y1, bw, bh)
   ctx.restore()
 
-  // ── Passive score label (top-left of bbox) ────────────────────────────────
   if (passive !== null) {
     const label = `live: ${passive.toFixed(2)}`
     ctx.save()
@@ -81,7 +74,6 @@ function drawOverlay(
     ctx.restore()
   }
 
-  // ── Yaw label (bottom-left of bbox) ──────────────────────────────────────
   if (yaw !== null) {
     const yawLabel = `yaw: ${yaw.toFixed(1)}°`
     ctx.save()
@@ -94,7 +86,6 @@ function drawOverlay(
     ctx.restore()
   }
 
-  // ── 5 Landmarks ───────────────────────────────────────────────────────────
   if (landmarks && landmarks.length === 5) {
     landmarks.forEach(([lx, ly], i) => {
       ctx.save()
@@ -107,7 +98,6 @@ function drawOverlay(
       ctx.stroke()
       ctx.restore()
 
-      // Label (tiny, same color)
       ctx.save()
       ctx.font = '9px monospace'
       ctx.fillStyle = LANDMARK_COLORS[i]
@@ -117,9 +107,26 @@ function drawOverlay(
   }
 }
 
-export function SessionView({ videoRef, state, onStart, onReset }: Props) {
+export function SessionView({ videoRef, state, onStart, onReset, onRegister }: Props) {
   const showDebug = new URLSearchParams(window.location.search).get('debug') === '1'
   const overlayRef = useRef<HTMLCanvasElement | null>(null)
+  const displayVideoRef = useRef<HTMLVideoElement | null>(null)
+
+  // Mirror the App-level stream into the visible <video>
+  useEffect(() => {
+    const src = videoRef.current
+    const dst = displayVideoRef.current
+    if (!src || !dst) return
+    const attach = () => {
+      if (src.srcObject instanceof MediaStream) dst.srcObject = src.srcObject
+    }
+    if (src.readyState >= 2) attach()
+    else src.addEventListener('loadeddata', attach, { once: true })
+    return () => {
+      src.removeEventListener('loadeddata', attach)
+      dst.srcObject = null
+    }
+  }, [videoRef])
 
   // Redraw overlay whenever new frame data arrives
   useEffect(() => {
@@ -134,7 +141,7 @@ export function SessionView({ videoRef, state, onStart, onReset }: Props) {
     }
   }, [state.latest_bbox, state.latest_landmarks, state.latest_passive, state.latest_yaw])
 
-  // Clear overlay on phase reset (idle / countdown)
+  // Clear overlay on phase reset
   useEffect(() => {
     if ((state.phase === 'idle' || state.phase === 'countdown') && overlayRef.current) {
       const ctx = overlayRef.current.getContext('2d')
@@ -146,9 +153,8 @@ export function SessionView({ videoRef, state, onStart, onReset }: Props) {
     <main className="session-page">
       <section className="session-shell">
         <div className="session-video-wrap">
-          <video ref={videoRef as React.Ref<HTMLVideoElement>} playsInline muted className="session-video" />
+          <video ref={displayVideoRef} autoPlay playsInline muted className="session-video" />
 
-          {/* Overlay canvas: same mirror transform as video, pointer-events none */}
           <canvas
             ref={overlayRef}
             width={CAP_W}
@@ -169,14 +175,45 @@ export function SessionView({ videoRef, state, onStart, onReset }: Props) {
 
         {state.error ? <p className="session-error">{state.error}</p> : null}
 
+        {state.auth_status !== 'idle' ? (
+          <div className="session-auth-status">
+            {state.auth_status === 'verifying' && '🔐 Đang xác thực...'}
+
+            {state.auth_status === 'authenticated' && (
+              <>
+                ✅ Xác thực thành công
+                {state.identified_user ? (
+                  <span className="session-auth-user"> — {state.identified_user}</span>
+                ) : null}
+                {state.similarity !== null ? (
+                  <span className="session-auth-score"> ({(state.similarity * 100).toFixed(1)}%)</span>
+                ) : null}
+              </>
+            )}
+
+            {state.auth_status === 'failed' && (
+              <>❌ {state.auth_message}</>
+            )}
+          </div>
+        ) : null}
+
+        {/* ── Actions ── */}
         <div className="session-actions">
-          {state.phase === 'idle' ? <button onClick={onStart}>Bắt đầu kiểm tra</button> : null}
+          {state.phase === 'idle' ? (
+            <>
+              <button onClick={onStart}>Bắt đầu kiểm tra</button>
+              <button className="secondary-button" onClick={onRegister}>
+                📋 Đăng ký người dùng
+              </button>
+            </>
+          ) : null}
           {state.phase !== 'idle' && state.phase !== 'result' ? (
             <button className="secondary-button" onClick={onReset}>
               Xác minh lại
             </button>
           ) : null}
         </div>
+
       </section>
     </main>
   )

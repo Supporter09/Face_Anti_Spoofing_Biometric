@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter, time
 
@@ -55,39 +57,82 @@ class LivenessService:
             threshold_spoof=resolved_spoof,
         )
 
-    def infer(self, request: LivenessInferRequest) -> LivenessInferResponse:
+    def infer(
+        self,
+        request: LivenessInferRequest,
+        *,
+        capture_debug: bool = False,
+        capture_session_id: str = 'default',
+        capture_root: Path | None = None,
+    ) -> LivenessInferResponse:
         started_at = perf_counter()
 
         if not request.image_base64:
-            return self._build_response(
+            response = self._build_response(
                 face_detected=False,
                 score=0.0,
                 label='no_face',
                 started_at=started_at,
                 message='No image payload was provided.',
             )
+            if capture_debug:
+                self._save_capture_debug(
+                    request=request,
+                    response=response,
+                    raw_bgr=None,
+                    detection=None,
+                    crop_for_model=None,
+                    debug_info=None,
+                    capture_root=capture_root,
+                    session_id=capture_session_id,
+                )
+            return response
 
         decoded = decode_base64_image_to_bgr(request.image_base64)
         if decoded.image_bgr is None:
-            return self._build_response(
+            response = self._build_response(
                 face_detected=False,
                 score=0.0,
                 label='no_face',
                 started_at=started_at,
                 message=decoded.error or 'Could not decode image payload.',
             )
+            if capture_debug:
+                self._save_capture_debug(
+                    request=request,
+                    response=response,
+                    raw_bgr=None,
+                    detection=None,
+                    crop_for_model=None,
+                    debug_info=None,
+                    capture_root=capture_root,
+                    session_id=capture_session_id,
+                )
+            return response
 
         detection = self.detector.detect(decoded.image_bgr)
         if detection is None:
             detector_reason = getattr(self.detector, 'unavailable_reason', None)
             message = detector_reason or 'No face was detected in the frame.'
-            return self._build_response(
+            response = self._build_response(
                 face_detected=False,
                 score=0.0,
                 label='no_face',
                 started_at=started_at,
                 message=message,
             )
+            if capture_debug:
+                self._save_capture_debug(
+                    request=request,
+                    response=response,
+                    raw_bgr=decoded.image_bgr,
+                    detection=None,
+                    crop_for_model=None,
+                    debug_info=None,
+                    capture_root=capture_root,
+                    session_id=capture_session_id,
+                )
+            return response
 
         crop_for_model = (
             detection.context_crop_bgr
@@ -95,9 +140,10 @@ class LivenessService:
             else detection.aligned_crop_bgr
         )
 
-        if self._debug_dir is not None and self._debug_frame_count < _DEBUG_MAX_FRAMES:
+        needs_debug_info = capture_debug or (self._debug_dir is not None and self._debug_frame_count < _DEBUG_MAX_FRAMES)
+        debug_info: dict | None = None
+        if needs_debug_info:
             live_score, debug_info = self.liveness_model.predict_live_score_debug(crop_for_model)
-            self._save_debug_frame(decoded.image_bgr, detection, live_score, debug_info)
         else:
             live_score = self.liveness_model.predict_live_score(crop_for_model)
 
@@ -115,7 +161,7 @@ class LivenessService:
         else:
             message = self.liveness_model.unavailable_reason or 'Liveness model is running in fallback mode.'
 
-        return self._build_response(
+        response = self._build_response(
             face_detected=True,
             score=live_score,
             label=label,
@@ -125,6 +171,30 @@ class LivenessService:
             face_landmarks=[[x, y] for x, y in detection.landmarks],
             pose=pose,
         )
+
+        if self._debug_dir is not None and self._debug_frame_count < _DEBUG_MAX_FRAMES:
+            self._save_debug_frame(
+                raw_bgr=decoded.image_bgr,
+                detection=detection,
+                crop_for_model=crop_for_model,
+                live_score=live_score,
+                debug_info=(debug_info or {}).copy(),
+                pose=pose,
+            )
+
+        if capture_debug:
+            self._save_capture_debug(
+                request=request,
+                response=response,
+                raw_bgr=decoded.image_bgr,
+                detection=detection,
+                crop_for_model=crop_for_model,
+                debug_info=(debug_info or {}).copy(),
+                capture_root=capture_root,
+                session_id=capture_session_id,
+            )
+
+        return response
 
     def _label_from_score(self, live_score: float) -> str:
         if live_score >= self.threshold_live:
@@ -151,7 +221,16 @@ class LivenessService:
             return 0.9, 0.3
         return threshold_live, threshold_spoof
 
-    def _save_debug_frame(self, raw_bgr: np.ndarray, detection, live_score: float, debug_info: dict) -> None:
+    def _save_debug_frame(
+        self,
+        *,
+        raw_bgr: np.ndarray,
+        detection,
+        crop_for_model: np.ndarray,
+        live_score: float,
+        debug_info: dict,
+        pose: dict[str, float] | None = None,
+    ) -> None:
         try:
             import cv2  # type: ignore
         except ImportError:
@@ -164,24 +243,20 @@ class LivenessService:
         prefix = self._debug_dir / f'{ts}_{n:04d}'
         label = self._label_from_score(live_score)
 
-        # 1. Raw frame với bbox và score vẽ lên
+        # 1. Raw frame with bbox + landmarks + score
         vis = raw_bgr.copy()
-        x1, y1, x2, y2 = [int(v) for v in detection.bbox_xyxy]
-        color = (0, 200, 0) if label == 'live' else (0, 0, 220) if label == 'spoof' else (0, 165, 255)
-        cv2.rectangle(vis, (x1, y1), (x2, y2), color, 2)
-        cv2.putText(vis, f'{label} {live_score:.3f}', (x1, y1 - 8),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-        cv2.imwrite(str(prefix) + '_1_raw.jpg', vis)
+        self._draw_face_overlay(vis=vis, detection=detection, live_score=live_score, label=label)
+        cv2.imwrite(str(prefix) + '_1_overlay.jpg', vis)
 
-        # 2. Face crop từ detector (80x80 hoặc size thực tế)
-        cv2.imwrite(str(prefix) + '_2_crop_detector.jpg', detection.aligned_crop_bgr)
+        # 2. Context-padded image used by backend model input pipeline (pre-resize)
+        cv2.imwrite(str(prefix) + '_2_context_model_input_raw.jpg', crop_for_model)
 
-        # 3. Model input 112x112 trước norm (uint8 RGB→BGR để lưu)
-        rgb_112 = debug_info.pop('_rgb_112', None)
-        if rgb_112 is not None:
-            cv2.imwrite(str(prefix) + '_3_model_input_112.jpg', cv2.cvtColor(rgb_112, cv2.COLOR_RGB2BGR))
+        # 3. Model resized input before normalization
+        rgb_input = debug_info.pop('_rgb_input', None)
+        if rgb_input is not None:
+            cv2.imwrite(str(prefix) + '_3_model_input_resized.jpg', cv2.cvtColor(rgb_input, cv2.COLOR_RGB2BGR))
 
-        # 4. Normalized array visualized (clip về [0,1], scale lên 255)
+        # 4. Normalized array visualized
         arr_normed = debug_info.pop('_arr_normed', None)
         if arr_normed is not None:
             vis_norm = np.clip(arr_normed, 0, 1) if not debug_info.get('imagenet_norm_applied') \
@@ -190,18 +265,129 @@ class LivenessService:
             cv2.imwrite(str(prefix) + '_4_model_input_vis.jpg', vis_norm_bgr)
 
         # 5. JSON metadata
+        face_detected = bool(detection is not None and len(getattr(detection, 'bbox_xyxy', [])) == 4)
         meta = {
             'frame': n,
             'timestamp_ms': ts,
             'live_score': live_score,
             'label': label,
+            'liveness_score': live_score,
+            'liveness_label': label,
+            'face_detected': face_detected,
+            'yaw_deg': pose.get('yaw_deg') if pose and pose.get('ok') else None,
+            'detection_confidence': float(detection.confidence) if detection is not None and hasattr(detection, 'confidence') and detection.confidence is not None else None,
             'threshold_live': self.threshold_live,
             'threshold_spoof': self.threshold_spoof,
             'face_bbox_xyxy': list(detection.bbox_xyxy),
             'frame_shape': list(raw_bgr.shape),
+            'crop_for_model_shape': list(crop_for_model.shape),
+            'context_crop_used': bool(detection.context_crop_bgr is not None),
             **debug_info,
         }
         (self._debug_dir / f'{ts}_{n:04d}_meta.json').write_text(json.dumps(meta, indent=2))
+
+    @staticmethod
+    def _sanitize_capture_session_id(value: str) -> str:
+        cleaned = re.sub(r'[^A-Za-z0-9._-]+', '_', value).strip('._-')
+        return cleaned or 'default'
+
+    def _save_capture_debug(
+        self,
+        *,
+        request: LivenessInferRequest,
+        response: LivenessInferResponse,
+        raw_bgr: np.ndarray | None,
+        detection,
+        crop_for_model: np.ndarray | None,
+        debug_info: dict | None,
+        capture_root: Path | None,
+        session_id: str,
+    ) -> None:
+        root = capture_root or Path(os.environ.get('LIVENESS_DEBUG_CAPTURE_ROOT', 'reports/liveness_debug_frames'))
+        session = self._sanitize_capture_session_id(session_id)
+        session_dir = root / session
+        session_dir.mkdir(parents=True, exist_ok=True)
+
+        ts = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S_%fZ')
+        base = session_dir / ts
+
+        overlay_path: str | None = None
+        context_path: str | None = None
+        model_input_path: str | None = None
+        if raw_bgr is not None:
+            try:
+                import cv2  # type: ignore
+                vis = raw_bgr.copy()
+                if detection is not None:
+                    self._draw_face_overlay(
+                        vis=vis,
+                        detection=detection,
+                        live_score=response.liveness_score,
+                        label=response.liveness_label,
+                    )
+                overlay_path = str(base) + '_1_overlay.jpg'
+                cv2.imwrite(overlay_path, vis)
+            except Exception:
+                overlay_path = None
+
+        if crop_for_model is not None:
+            try:
+                import cv2  # type: ignore
+                context_path = str(base) + '_2_context_model_input_raw.jpg'
+                cv2.imwrite(context_path, crop_for_model)
+            except Exception:
+                context_path = None
+
+        if debug_info is not None:
+            rgb_input = debug_info.pop('_rgb_input', None)
+            if rgb_input is not None:
+                try:
+                    import cv2  # type: ignore
+                    model_input_path = str(base) + '_3_model_input_resized.jpg'
+                    cv2.imwrite(model_input_path, cv2.cvtColor(rgb_input, cv2.COLOR_RGB2BGR))
+                except Exception:
+                    model_input_path = None
+
+        meta = {
+            'session_id': session,
+            'captured_at_utc': ts,
+            'has_image_payload': bool(request.image_base64),
+            'current_phase': request.phase,
+            'overlay_path': overlay_path,
+            'context_model_input_raw_path': context_path,
+            'model_input_resized_path': model_input_path,
+            'context_crop_used': bool(detection is not None and getattr(detection, 'context_crop_bgr', None) is not None),
+            'liveness_score': response.liveness_score,
+            'liveness_label': str(response.liveness_label),
+            'face_detected': response.face_detected,
+            'yaw_deg': response.yaw_deg,
+            'detection_confidence': detection.confidence if detection else None,
+            'response': response.model_dump(),
+        }
+        (Path(str(base) + '_meta.json')).write_text(json.dumps(meta, indent=2))
+
+    @staticmethod
+    def _draw_face_overlay(*, vis: np.ndarray, detection, live_score: float, label: str) -> None:
+        try:
+            import cv2  # type: ignore
+        except ImportError:
+            return
+
+        x1, y1, x2, y2 = [int(v) for v in detection.bbox_xyxy]
+        color = (0, 200, 0) if label == 'live' else (0, 0, 220) if label == 'spoof' else (0, 165, 255)
+        cv2.rectangle(vis, (x1, y1), (x2, y2), color, 2)
+        cv2.putText(
+            vis,
+            f'{label} {live_score:.3f}',
+            (x1, max(20, y1 - 8)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            color,
+            2,
+        )
+        for landmark in getattr(detection, 'landmarks', []):
+            lx, ly = int(landmark[0]), int(landmark[1])
+            cv2.circle(vis, (lx, ly), 3, (255, 255, 0), -1)
 
     def _build_response(
         self,

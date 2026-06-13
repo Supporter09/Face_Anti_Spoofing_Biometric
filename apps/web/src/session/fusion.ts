@@ -11,7 +11,7 @@ export const MAX_YAW_JUMP = 15 // degrees; consecutive jump > this = suspect fra
 // solvePnP with approximate focal length gives a constant offset (typically 10-20°),
 // so absolute thresholds are unreliable. Using relative yaw makes the challenge
 // robust to camera position, FOV, and solvePnP calibration offset.
-export const YAW_TARGET = 10 // minimum relative yaw for turn phases (lowered from 12 for real-world robustness)
+export const YAW_TARGET = 20 // minimum relative yaw for turn phases (increased for better liveness challenge)
 export const YAW_CENTER = 10 // maximum |relative yaw| for forward/center phases (loosened from 8)
 
 export function evaluateChallenge(
@@ -135,4 +135,64 @@ export function computeVerdict(
   if (!challenge_eval.pass) return { ...base, verdict: 'SPOOF', reason: 'challenge_failed' }
   if (!passivePass) return { ...base, verdict: 'SPOOF', reason: 'passive_low' }
   return { ...base, verdict: 'LIVE' }
+}
+
+/**
+ * Select the best N frames for authentication.
+ * Filters for: face_detected, centered (abs(relative_yaw) <= YAW_CENTER), high passive score.
+ * Returns top N frames sorted by passive_score descending.
+ */
+export function selectBestFramesForAuth(
+  frames: FrameRecord[],
+  yawBaseline: number,
+  count: number = 3
+): FrameRecord[] {
+  const rel = (yaw: number | null) => yaw === null ? null : yaw - yawBaseline
+
+  const goodFrames = frames.filter((f) => {
+    if (!f.face_detected || !f.image_base64) return false
+    if (f.passive_score < T_PASSIVE) return false
+    const relativeYaw = rel(f.yaw_deg)
+    if (relativeYaw === null) return false
+    return Math.abs(relativeYaw) <= YAW_CENTER
+  })
+
+  // Sort by passive_score descending
+  goodFrames.sort((a, b) => b.passive_score - a.passive_score)
+
+  return goodFrames.slice(0, count)
+}
+
+/**
+ * Average multiple embeddings into a single template.
+ * @param embeddings Array of embedding arrays (each 512-dim)
+ * @returns Mean embedding as flat array
+ */
+export function meanEmbeddings(embeddings: number[][]): number[] {
+  if (!embeddings || embeddings.length === 0) return []
+  if (embeddings.length === 1) return embeddings[0]
+
+  const dim = embeddings[0].length
+  if (dim === 0) return []
+
+  // Validate all embeddings have same dimension
+  for (const emb of embeddings) {
+    if (!emb || emb.length !== dim) {
+      throw new Error(`Embedding dimension mismatch: expected ${dim}, got ${emb?.length ?? 'undefined'}`)
+    }
+  }
+
+  const result = new Array(dim).fill(0)
+
+  for (const emb of embeddings) {
+    for (let i = 0; i < dim; i++) {
+      result[i] += emb[i]
+    }
+  }
+
+  for (let i = 0; i < dim; i++) {
+    result[i] /= embeddings.length
+  }
+
+  return result
 }
